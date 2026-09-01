@@ -14,7 +14,7 @@
 - Required branch: `feat/class-preview-character-model-replacement`.
 - Approved design checkpoint before this plan: `295ec988877bf2017ef7fb7b77fda13099d1c23a`.
 - Approved design: `docs/superpowers/specs/2026-09-01-production-rig-review-correction-design.md`, SHA-256 `4dbd4c70a7732707adfc34d8722518066c9681566b28e0a3b29afa8efff56906`.
-- Original implementation base remains `d729b520252c7dc2ad2e9ba7182f63f4c33c27dd`; its eleven existing first-parent descendants must not be rewritten.
+- Original implementation base remains `d729b520252c7dc2ad2e9ba7182f63f4c33c27dd`; its thirteen pre-implementation first-parent descendants after this plan correction must not be rewritten. The first eleven predate this corrective plan, commit twelve is `docs: plan production rig review corrections`, and commit thirteen is the diagnostic-free behavior-RED correction that establishes `correctionImplementationBase`.
 - The approved seven-path product scope is exact. No eighth product path is allowed.
 - `tests/fixtures/presentation/production_rig_inspection_rest_fixtures.json` remains byte-identical at SHA-256 `a0ca9b54b9ea158c4c970cbd36121bfc89fd06d7ed2cff054c032f8e8c21f811`.
 - Preserve all 77 protected untracked records from `C:\Users\Jacob\AppData\Local\Temp\pf-character-task2-reconcile-gate-0001\premerge-untracked-manifest.json`, whose manifest SHA-256 is `9f7d8b800e27f94d2bc1f7798a88c9bda73c65d0429c3c072bbe00daeafbe2bd`.
@@ -27,6 +27,7 @@
 - Use path preflight and method-shape guards before loading or calling not-yet-created scripts. A missing global class cache, parser failure, loader failure, or invalid project path is never a trustworthy RED.
 - A focused GREEN requires native exit `0`, exactly one terminal `TEST_SUMMARY: PASS (0 failures)`, zero fail markers, and no unexplained parser, loader, import, script, crash, fatal, segmentation, object-leak, or RID-leak diagnostics.
 - A focused RED requires nonzero exit, exactly one terminal `TEST_SUMMARY: FAIL` marker, only the explicitly named assertion failures, and zero infrastructure diagnostics.
+- `PF_RIG_FACTORY_CONTRACT_PROBE` must be absent from every normal focused regression, cold import, and full-suite process. Only Task A1's two isolated intentional-error probes may set it, and each probe must clear it before another process begins.
 - No downloads, Blender, 3D Gen Studio, asset import into the authoritative worktree, geometry, rigging, weights, UVs, textures, preview, merge, rebase, push, cleanup, deletion, or publication.
 
 ---
@@ -146,15 +147,16 @@ Expected:
 
 - branch is `feat/class-preview-character-model-replacement`;
 - `295ec988...` is an ancestor;
-- exactly twelve first-parent commits follow `originalBase`;
+- exactly thirteen first-parent commits follow `originalBase`;
 - the first eleven are the three existing implementation commits, six original plan corrections, and the two correction-spec commits already verified by the Studio Lead;
 - commit twelve is this plan-only commit with subject `docs: plan production rig review corrections`;
+- commit thirteen is the plan-only correction with subject `docs: add production rig behavior RED gates`;
 - tracked/index state is clean;
 - none of the seven product paths differs from `295ec988...`, and the two prospective new production files are absent.
 
 - [ ] **Step 2: Record baseline and containment evidence**
 
-Create a fresh evidence root with `New-Item -ItemType Directory`, record `correctionImplementationBase`, the exact twelve-commit history, `git status`, `git diff --check`, the seven-path allowlist, the 77-record manifest verification, both GLB hashes, the fixture hash, the three existing spec/plan hashes, all five absent sentinels, and Dawn/Combat HUD read-only snapshots. Store JSON with UTF-8 no BOM. Do not write any repository path.
+Create a fresh evidence root with `New-Item -ItemType Directory`, record `correctionImplementationBase`, the exact thirteen-commit history, `git status`, `git diff --check`, the seven-path allowlist, the 77-record manifest verification, both GLB hashes, the fixture hash, the three existing spec/plan hashes, all five absent sentinels, and Dawn/Combat HUD read-only snapshots. Store JSON with UTF-8 no BOM. Do not write any repository path.
 
 Stop if any hash, path count, ancestor, sentinel, or protected worktree boundary differs materially.
 
@@ -203,9 +205,112 @@ $project = 'F:\Projects(root)\Game dev\Projects\party-forge\.worktrees\class-pre
 
 Trustworthy RED requires native nonzero exit, exactly one terminal `TEST_SUMMARY: FAIL (2 failures)`, only `read-only mapping resolution exists` and `exact-path mapping loader exists`, and zero parser, loader, import, script, engine-crash, segmentation, or leak diagnostics. Stop without production files if the RED differs.
 
-- [ ] **Step 3: Add complete result behavior assertions**
+- [ ] **Step 3: Add the minimal cold-safe A1 interface shells**
+
+Create `humanoid_rig_mapping_resolution.gd` with exactly this neutral shell. It exposes the approved parse-safe interface and stores supplied values without validation, defensive duplication, success determination, rejection transformation, or error emission:
+
+```gdscript
+class_name HumanoidRigMappingResolution
+extends RefCounted
+
+const RigMapping := preload("res://scripts/presentation/humanoid_rig_mapping.gd")
+const _RESOURCE_PATH_BY_BODY_PRESET := {
+	&"masculine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_masculine.tres",
+	&"feminine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_feminine.tres",
+}
+
+var _requested_body_preset: StringName
+var _selected_resource_path: String
+var _mapping: RigMapping
+var _failure_categories: Array[StringName]
+var _error_messages: PackedStringArray
+
+func _init(requested_body_preset: StringName, selected_resource_path: String, mapping: RigMapping, failure_categories: Array[StringName], error_messages: PackedStringArray) -> void:
+	_requested_body_preset = requested_body_preset
+	_selected_resource_path = selected_resource_path
+	_mapping = mapping
+	_failure_categories = failure_categories
+	_error_messages = error_messages
+
+static func succeeded(requested_body_preset: StringName, selected_resource_path: String, mapping: RigMapping) -> HumanoidRigMappingResolution:
+	var categories: Array[StringName] = []
+	return HumanoidRigMappingResolution.new(requested_body_preset, selected_resource_path, mapping, categories, PackedStringArray())
+
+static func failed(requested_body_preset: StringName, selected_resource_path: String, failure_categories: Array[StringName], error_messages: PackedStringArray) -> HumanoidRigMappingResolution:
+	return HumanoidRigMappingResolution.new(requested_body_preset, selected_resource_path, null, failure_categories, error_messages)
+
+func get_requested_body_preset() -> StringName:
+	return _requested_body_preset
+
+func get_selected_resource_path() -> String:
+	return _selected_resource_path
+
+func get_mapping() -> RigMapping:
+	return _mapping
+
+func get_failure_categories() -> Array[StringName]:
+	var neutral: Array[StringName] = []
+	return neutral
+
+func get_error_messages() -> PackedStringArray:
+	return PackedStringArray()
+
+func is_success() -> bool:
+	return false
+
+func rejected_by_mapped_rig(_validation_errors: PackedStringArray) -> HumanoidRigMappingResolution:
+	return self
+```
+
+Create `humanoid_rig_mapping_loader.gd` with exactly this neutral shell. It accepts the approved callables so construction is safe but intentionally does not invoke them:
+
+```gdscript
+class_name HumanoidRigMappingLoader
+extends RefCounted
+
+func _init(_exists_override: Callable = Callable(), _load_override: Callable = Callable()) -> void:
+	pass
+
+func exists_exact(_resource_path: String) -> bool:
+	return false
+
+func load_exact(_resource_path: String) -> Variant:
+	return null
+```
+
+Do not commit these shells. Confirm `git diff --check` and exact three-path working scope, then continue directly to the behavior test slice.
+
+- [ ] **Step 4: Add guarded result and loader behavior assertions**
 
 After the path/load guards, test these exact behaviors against the loaded resolution script:
+
+Add this exact method-shape helper and guard before the first call. The guard must pass against the shells; if it fails, the run returns only `A1 result and loader interfaces have exact method shapes` and is not the behavior RED:
+
+```gdscript
+func _method_argument_count(script: Script, method_name: StringName) -> int:
+	for method_value: Variant in script.get_script_method_list():
+		var method := method_value as Dictionary
+		if StringName(method.get("name", "")) == method_name:
+			return (method.get("args", []) as Array).size()
+	return -1
+
+var interface_shape_is_exact := (
+	_method_argument_count(_resolution_script, &"succeeded") == 3
+	and _method_argument_count(_resolution_script, &"failed") == 4
+	and _method_argument_count(_resolution_script, &"get_requested_body_preset") == 0
+	and _method_argument_count(_resolution_script, &"get_selected_resource_path") == 0
+	and _method_argument_count(_resolution_script, &"get_mapping") == 0
+	and _method_argument_count(_resolution_script, &"get_failure_categories") == 0
+	and _method_argument_count(_resolution_script, &"get_error_messages") == 0
+	and _method_argument_count(_resolution_script, &"is_success") == 0
+	and _method_argument_count(_resolution_script, &"rejected_by_mapped_rig") == 1
+	and _method_argument_count(_loader_script, &"exists_exact") == 1
+	and _method_argument_count(_loader_script, &"load_exact") == 1
+)
+TestAssertions.truthy(interface_shape_is_exact, "A1 result and loader interfaces have exact method shapes", failures)
+if not interface_shape_is_exact:
+	return failures
+```
 
 ```gdscript
 var mapping := _mapping(MASCULINE_ID, MASCULINE_SHA, MASCULINE_REST)
@@ -282,7 +387,22 @@ class LoaderRecorder:
 		return values_by_path.get(resource_path)
 ```
 
-Instantiate the loaded loader script with the recorder callables. Set only `MASCULINE_PATH` to exist and map it to the masculine mapping. Assert `exists_exact(MASCULINE_PATH)` is true, `load_exact(MASCULINE_PATH)` returns the identical mapping Resource, and the two recorded call arrays each contain exactly that path once. Then call both loader methods with `FEMININE_PATH`, assert false/null, and assert the recorder contains no substituted masculine or shared path for those feminine calls.
+Instantiate and assert the loader seam with these exact labels:
+
+```gdscript
+var recorder := LoaderRecorder.new()
+recorder.existing_paths[MASCULINE_PATH] = true
+recorder.values_by_path[MASCULINE_PATH] = mapping
+var loader: RefCounted = _loader_script.new(Callable(recorder, &"exists_exact"), Callable(recorder, &"load_exact"))
+TestAssertions.truthy(bool(loader.call(&"exists_exact", MASCULINE_PATH)), "loader forwards existence callable", failures)
+TestAssertions.equal(loader.call(&"load_exact", MASCULINE_PATH), mapping, "loader forwards load callable", failures)
+TestAssertions.equal(recorder.existence_calls, PackedStringArray([MASCULINE_PATH]), "loader records exact existence path", failures)
+TestAssertions.equal(recorder.load_calls, PackedStringArray([MASCULINE_PATH]), "loader records exact load path", failures)
+TestAssertions.truthy(not bool(loader.call(&"exists_exact", FEMININE_PATH)), "loader does not substitute missing feminine existence", failures)
+TestAssertions.equal(loader.call(&"load_exact", FEMININE_PATH), null, "loader does not substitute missing feminine value", failures)
+TestAssertions.equal(recorder.existence_calls, PackedStringArray([MASCULINE_PATH, FEMININE_PATH]), "loader never substitutes existence path", failures)
+TestAssertions.equal(recorder.load_calls, PackedStringArray([MASCULINE_PATH, FEMININE_PATH]), "loader never substitutes load path", failures)
+```
 
 Add this `PF_RIG_FACTORY_CONTRACT_PROBE` branch before normal assertions. It exercises one invalid factory call per process so the outer focused runner records exactly one intentional script error:
 
@@ -321,7 +441,27 @@ if not factory_probe.is_empty():
 
 Also assert the resolution script's private `_RESOURCE_PATH_BY_BODY_PRESET` constant map equals the catalog's public path map byte-for-byte.
 
-- [ ] **Step 4: Create `humanoid_rig_mapping_resolution.gd`**
+- [ ] **Step 5: Run the A1 behavior RED once**
+
+Run the Step 2 focused command with `PF_RIG_FACTORY_CONTRACT_PROBE` absent. A trustworthy A1 behavior RED requires native nonzero exit, exactly one terminal `TEST_SUMMARY: FAIL (11 failures)`, and exactly these failure labels in suite order:
+
+```text
+valid success result is observable
+stored categories resist caller mutation
+stored messages resist caller mutation
+mapped rejection preserves category cardinality
+mapped rejection preserves validator order
+loader forwards existence callable
+loader forwards load callable
+loader records exact existence path
+loader records exact load path
+loader never substitutes existence path
+loader never substitutes load path
+```
+
+The interface-shape assertion, all other result assertions, the two neutral feminine loader assertions, and the path-table equality must pass. Require zero parser, loader, import, script, engine-crash, segmentation, object-leak, or RID-leak diagnostics. Preserve this RED before replacing either shell. Any extra/missing failure or diagnostic is a stop condition.
+
+- [ ] **Step 6: Replace the result shell with the approved implementation**
 
 Implement the approved spec exactly. The complete structural content is:
 
@@ -466,7 +606,7 @@ static func _failure_defects(requested_body_preset: StringName, selected_resourc
 	return defects
 ```
 
-- [ ] **Step 5: Create `humanoid_rig_mapping_loader.gd`**
+- [ ] **Step 7: Replace the loader shell with the approved implementation**
 
 Use this complete implementation:
 
@@ -494,11 +634,11 @@ func load_exact(resource_path: String) -> Variant:
 
 The callable constructor is the production dependency seam, not a test-only method. The catalog still receives a loader per call and stores no loader.
 
-- [ ] **Step 6: Run normal A1 GREEN**
+- [ ] **Step 8: Run normal A1 GREEN**
 
 Run the Step 2 command with `PF_RIG_FACTORY_CONTRACT_PROBE` absent. Require exit `0`, exactly one `TEST_SUMMARY: PASS (0 failures)`, and zero prohibited diagnostics.
 
-- [ ] **Step 7: Run both isolated intentional factory-contract probes**
+- [ ] **Step 9: Run both isolated intentional factory-contract probes**
 
 Run the same focused command once with `PF_RIG_FACTORY_CONTRACT_PROBE=invalid_success`, clear it, then once with `PF_RIG_FACTORY_CONTRACT_PROBE=invalid_failure`, and clear it again. Each process is independently bounded and preserved. Expected native exit is nonzero because the focused runner captures the intentional `push_error`. For each process require:
 
@@ -509,7 +649,7 @@ Run the same focused command once with `PF_RIG_FACTORY_CONTRACT_PROBE=invalid_su
 
 Preserve this as an intentional programmer-contract probe, not a product RED or GREEN. Clear the environment variable immediately afterward.
 
-- [ ] **Step 8: Commit A1**
+- [ ] **Step 10: Commit A1**
 
 Run `git diff --check`, rehash the fixture/protected files, and require exact scope:
 
@@ -540,36 +680,48 @@ git -C $project commit -m 'feat: add read-only rig mapping results'
 
 - [ ] **Step 1: Add complete catalog behavior tests with a method-shape guard**
 
-Before calling the changed method, use this helper and guard. It requires `resolve` to have exactly two arguments and returns before invocation when the old one-argument shape remains, preventing an argument-count engine diagnostic during RED:
+Reuse `_method_argument_count()` from Task A1 and add this guard before calling the changed method. It requires `resolve` to have exactly two arguments and returns before invocation when the old one-argument shape remains, preventing an argument-count engine diagnostic during RED:
 
 ```gdscript
-func _method_argument_count(script: Script, method_name: StringName) -> int:
-	for method_value: Variant in script.get_script_method_list():
-		var method := method_value as Dictionary
-		if StringName(method.get("name", "")) == method_name:
-			return (method.get("args", []) as Array).size()
-	return -1
-
 var resolve_argument_count := _method_argument_count(_catalog_script, &"resolve")
 TestAssertions.equal(resolve_argument_count, 2, "catalog exposes per-call exact-path structured resolve", failures)
 if resolve_argument_count != 2:
 	return failures
 ```
 
-Reuse the test-local `LoaderRecorder` created in Task A1. After the method-shape guard, construct the production loader script with `loader_script.new(Callable(recorder, &"exists_exact"), Callable(recorder, &"load_exact"))`. For every outcome use a fresh recorder so exact call counts cannot leak between cases. Assert:
+Reuse the test-local `LoaderRecorder` created in Task A1. After the method-shape guard, construct the production loader script with `loader_script.new(Callable(recorder, &"exists_exact"), Callable(recorder, &"load_exact"))`. For every injected outcome use a fresh recorder so exact call counts cannot leak between cases.
 
-- unknown preset returns `unknown_body_preset`, empty path, zero loader calls;
-- missing masculine resource makes one existence call, zero load calls, and exact message;
-- resolving masculine with no injected loader exercises the default `ResourceLoader` seam and returns the same exact `missing_resource` result while the forbidden `.tres` remains absent;
-- existing path plus null load returns `resource_load_failed`;
-- non-mapping resource returns `wrong_resource_type`;
-- wrong mapping ID, canonical ID, source hash, and rest signature return categories/messages in exact precedence;
-- masculine and feminine successes request only their exact paths and return only their exact mapping references;
-- cross-body mapping produces identity failures and no alternate path call;
-- no request ever contains the shared resource URI;
-- a later failed call does not mutate a previously returned success;
-- the catalog property list exposes no active/result/error field;
-- the catalog and resolution path tables are equal.
+Add this exact snapshot helper. Each matrix row below is one `TestAssertions.equal(actual_snapshot, expected_snapshot, label, failures)` assertion, so the shell RED has one stable failure per incomplete behavior rather than incidental field-level counts:
+
+```gdscript
+func _resolution_snapshot(result: RefCounted, recorder: LoaderRecorder = null) -> Dictionary:
+	return {
+		&"preset": result.call(&"get_requested_body_preset"),
+		&"path": result.call(&"get_selected_resource_path"),
+		&"mapping": result.call(&"get_mapping"),
+		&"categories": result.call(&"get_failure_categories"),
+		&"messages": result.call(&"get_error_messages"),
+		&"success": bool(result.call(&"is_success")),
+		&"existence_calls": recorder.existence_calls.duplicate() if recorder != null else PackedStringArray(),
+		&"load_calls": recorder.load_calls.duplicate() if recorder != null else PackedStringArray(),
+	}
+```
+
+The expected matrix is exact. Each row names `MASCULINE_PATH` or `FEMININE_PATH` directly; there is no placeholder substitution or alternate path. Messages are the literal templates from the Exact Category and Resource Tables with those named constants interpolated:
+
+| Assertion label | Fixture and exact expected snapshot |
+|---|---|
+| `unknown preset avoids loader and returns exact failure` | Request `&"unknown"`; empty path; null mapping; categories `[&"unknown_body_preset"]`; message `humanoid rig mapping catalog body preset unknown is unknown`; success false; both call arrays empty. |
+| `missing resource outcome is exact` | Masculine recorder reports absent; masculine path; null mapping; categories `[&"missing_resource"]`; exact missing-resource message; success false; existence calls `[MASCULINE_PATH]`; load calls empty. |
+| `default production loader reports exact missing resource` | Call masculine with no loader while the forbidden resource is absent; same structured missing-resource fields; call arrays empty because no recorder is injected. |
+| `failed load outcome is exact` | Masculine recorder reports present and returns null; categories `[&"resource_load_failed"]`; exact failed-load message; existence/load calls each `[MASCULINE_PATH]`. |
+| `wrong resource type outcome is exact` | Masculine recorder returns `Resource.new()`; categories `[&"wrong_resource_type"]`; actual type `Resource`; exact wrong-type message; both call arrays `[MASCULINE_PATH]`. |
+| `identity mismatch categories and messages are ordered` | Masculine recorder returns a mapping with ID `&"wrong"`, canonical ID `&"wrong"`, feminine source SHA, and feminine rest signature; categories are `[&"wrong_mapping_id", &"wrong_canonical_rig_id", &"wrong_source_hash", &"wrong_rest_signature"]`; the four exact messages use masculine expected values and actual wrong/feminine values in that order; both call arrays `[MASCULINE_PATH]`. |
+| `masculine exact path resolution succeeds` | Masculine mapping; masculine path; identical mapping reference; empty categories/messages; success true; both call arrays `[MASCULINE_PATH]`. |
+| `feminine exact path resolution succeeds` | Feminine mapping; feminine path; identical mapping reference; empty categories/messages; success true; both call arrays `[FEMININE_PATH]`. |
+| `cross-body mapping fails without fallback` | Masculine request returns feminine mapping; categories `[&"wrong_mapping_id", &"wrong_source_hash", &"wrong_rest_signature"]` and exact ordered messages; null mapping; success false; both call arrays contain only `[MASCULINE_PATH]`. |
+
+After the matrix, resolve masculine successfully, retain that result, run a new unknown-preset failure, then assert the retained result still reports success, the same mapping reference, and empty categories/messages with label `later catalog failure does not mutate prior success`. Concatenate every recorder call array and assert the shared resource URI never occurs. Inspect the catalog property list and assert no active/result/error field. Assert the catalog and resolution path tables are exactly equal.
 
 Delete the old `_activate_if_resolved()` test helper and its simulated `active_mapping` assertions. Those assertions are replaced by the result immutability checks above; real active-visual commit/rollback remains intentionally deferred and must not be claimed by this unit suite.
 
@@ -577,7 +729,64 @@ Delete the old `_activate_if_resolved()` test helper and its simulated `active_m
 
 Run the focused catalog command. Trustworthy RED requires nonzero exit, exactly one `TEST_SUMMARY: FAIL (1 failures)`, only `catalog exposes per-call exact-path structured resolve`, and zero infrastructure diagnostics.
 
-- [ ] **Step 3: Replace catalog implementation**
+- [ ] **Step 3: Install the minimal stateless two-argument catalog shell**
+
+Replace the old constructor state and one-argument method with this exact shell. It returns valid structured unknown/missing failures, ignores the loader, emits no error, stores no state, and never searches another path:
+
+```gdscript
+class_name HumanoidRigMappingCatalog
+extends RefCounted
+
+const RigMapping := preload("res://scripts/presentation/humanoid_rig_mapping.gd")
+const MappingResolution := preload("res://scripts/presentation/humanoid_rig_mapping_resolution.gd")
+const MappingLoader := preload("res://scripts/presentation/humanoid_rig_mapping_loader.gd")
+const BODY_PRESETS: Array[StringName] = [&"masculine", &"feminine"]
+const MAPPING_ID_BY_BODY_PRESET := {
+	&"masculine": &"pf_humanoid_v1_mixamo52_masculine",
+	&"feminine": &"pf_humanoid_v1_mixamo52_feminine",
+}
+const SOURCE_SHA256_BY_BODY_PRESET := {
+	&"masculine": "8f589e35f16f02fe4aa0f45b5f2c85377a41f9ecc188670bf59159518e6cdbe4",
+	&"feminine": "173198e3d044418b9765971e8b698664176c05dadd6a5aaa4ddb8df8d4c08667",
+}
+const REST_SIGNATURE_BY_BODY_PRESET := {
+	&"masculine": "1ea73d190881c437d8ca6fc10dd7c4f446d2d14523416bcd0731264dad689eda",
+	&"feminine": "fad7e1860ef45781179d156654734b6160a7d97df96be43d3eb8c0bc51ea5c85",
+}
+const RESOURCE_PATH_BY_BODY_PRESET := {
+	&"masculine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_masculine.tres",
+	&"feminine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_feminine.tres",
+}
+
+func resolve(body_preset_id: StringName, _loader: MappingLoader = null) -> MappingResolution:
+	if body_preset_id not in BODY_PRESETS:
+		var unknown_categories: Array[StringName] = [&"unknown_body_preset"]
+		return MappingResolution.failed(body_preset_id, "", unknown_categories, PackedStringArray(["humanoid rig mapping catalog body preset %s is unknown" % body_preset_id]))
+	var resource_path: String = RESOURCE_PATH_BY_BODY_PRESET[body_preset_id]
+	var missing_categories: Array[StringName] = [&"missing_resource"]
+	return MappingResolution.failed(body_preset_id, resource_path, missing_categories, PackedStringArray(["humanoid rig mapping catalog body preset %s resource %s does not exist" % [body_preset_id, resource_path]]))
+```
+
+Do not commit the shell. Confirm it has no instance `var`, constructor, active state, fallback, or loader invocation.
+
+- [ ] **Step 4: Run the A2 behavior RED once**
+
+Run the focused catalog command with `PF_RIG_FACTORY_CONTRACT_PROBE` absent. A trustworthy behavior RED requires native nonzero exit, exactly one terminal `TEST_SUMMARY: FAIL (8 failures)`, and exactly these labels in matrix order:
+
+```text
+missing resource outcome is exact
+failed load outcome is exact
+wrong resource type outcome is exact
+identity mismatch categories and messages are ordered
+masculine exact path resolution succeeds
+feminine exact path resolution succeeds
+cross-body mapping fails without fallback
+later catalog failure does not mutate prior success
+```
+
+The unknown-preset, default-production-loader missing-resource, no-shared-path, stateless-property, and path-table assertions must pass. Require zero parser, loader, import, script, engine-crash, segmentation, object-leak, or RID-leak diagnostics. Preserve this RED before replacing the shell.
+
+- [ ] **Step 5: Replace the catalog shell with the approved implementation**
 
 Remove `_mapping_by_body_preset`, its constructor injection, the mapping-or-null return, and discarded private errors. Implement:
 
@@ -652,7 +861,7 @@ static func _append_identity_errors(body_preset_id: StringName, mapping: RigMapp
 		messages.append("humanoid rig mapping catalog body preset %s source rest signature must be %s, got %s" % [body_preset_id, expected_rest_signature, mapping.source_rest_signature])
 ```
 
-- [ ] **Step 4: Run A2 GREEN and result/catalog regression**
+- [ ] **Step 6: Run A2 GREEN and result/catalog regression**
 
 Run the catalog suite, then:
 
@@ -662,7 +871,7 @@ Run the catalog suite, then:
 
 Both commands require pristine GREEN. Confirm the production catalog declares no instance `var` and default resolution is not invoked while the forbidden `.tres` files are absent.
 
-- [ ] **Step 5: Commit A2**
+- [ ] **Step 7: Commit A2**
 
 Require exact scope of the catalog and its one test, then commit:
 
@@ -685,7 +894,7 @@ git -C $project commit -m 'feat: resolve rig mappings by exact path'
 
 - [ ] **Step 1: Add a guarded RED and exact public assertions**
 
-At the beginning of the mapped-rig test after loading the contract, assert `has_method(&"validate_mapped_bind_identity")` with label `public mapped bind identity validator exists`; return before calls when absent.
+At the beginning of the mapped-rig test after loading the contract, assert `has_method(&"validate_mapped_bind_identity")` with label `public mapped bind identity validator exists`; return before calls when absent. After the method exists, reuse `_method_argument_count()` and assert arity `4` with label `public mapped bind identity validator signature is exact`; return before calls when the arity differs. The missing-method RED must not mention or call the absent method.
 
 After the guard, assert:
 
@@ -706,6 +915,24 @@ TestAssertions.equal(
 	_contract.call(&"validate_mapped_bind_identity", [&"Root"] as Array[StringName], &"Missing", 0, 0),
 	PackedStringArray(["mapped humanoid Skin bind 0 name Missing must resolve exactly once; found 0"]),
 	"zero name match rejects deterministically",
+	failures
+)
+TestAssertions.equal(
+	_contract.call(&"validate_mapped_bind_identity", [&"Root"] as Array[StringName], &"Root", -1, 3),
+	PackedStringArray(["mapped humanoid Skin bind 3 bone index -1 is out of range"]),
+	"pure mapped bind range rejects deterministically",
+	failures
+)
+TestAssertions.equal(
+	_contract.call(&"validate_mapped_bind_identity", [&"Root", &"Child"] as Array[StringName], &"Child", 1, 4),
+	PackedStringArray(),
+	"exact name and numeric identity agree",
+	failures
+)
+TestAssertions.equal(
+	_contract.call(&"validate_mapped_bind_identity", [&"Root", &"Child"] as Array[StringName], &"Child", 0, 5),
+	PackedStringArray(["mapped humanoid Skin bind 5 name Child resolves to bone 1 but numeric index is 0"]),
+	"pure mapped bind name index conflict rejects deterministically",
 	failures
 )
 ```
@@ -754,7 +981,36 @@ Do not create or mutate a duplicate-name `Skeleton3D`.
 
 Run the mapped-rig suite. Trustworthy RED requires one failure named `public mapped bind identity validator exists`, no call of the missing method, and zero infrastructure diagnostics.
 
-- [ ] **Step 3: Implement the pure validator**
+- [ ] **Step 3: Add the minimal pure bind-identity shell**
+
+Add exactly this cold-safe, side-effect-free shell before `_resolve_mapped_skin_binds()`. It has the final public signature, returns a neutral empty error array for every input, and is not yet called by production resolution:
+
+```gdscript
+static func validate_mapped_bind_identity(
+		_bone_names: Array[StringName],
+		_bind_name: StringName,
+		_numeric_bone_index: int,
+		_bind_slot: int
+	) -> PackedStringArray:
+	return PackedStringArray()
+```
+
+Do not alter `_resolve_mapped_skin_binds()` or remove `_matching_name_indices()` in this scaffold step.
+
+- [ ] **Step 4: Run the Task B behavior RED once**
+
+Run the mapped-rig suite with `PF_RIG_FACTORY_CONTRACT_PROBE` absent. A trustworthy behavior RED requires native nonzero exit, exactly one terminal `TEST_SUMMARY: FAIL (4 failures)`, and exactly these labels in order:
+
+```text
+duplicate synthetic name array rejects deterministically
+zero name match rejects deterministically
+pure mapped bind range rejects deterministically
+pure mapped bind name index conflict rejects deterministically
+```
+
+The method-signature guard, empty-name authority, exact-one agreement, public null mapping/skeleton/skin, empty target, and every pre-existing mapped-validator assertion must pass. Require zero parser, loader, import, script, engine-crash, segmentation, object-leak, or RID-leak diagnostics. Preserve the RED before changing the shell or bind resolver.
+
+- [ ] **Step 5: Replace the shell and integrate the pure validator**
 
 Add this method before `_resolve_mapped_skin_binds()`:
 
@@ -806,7 +1062,7 @@ Remove `_matching_name_indices()` after no production caller remains. Its exact 
 
 Do not alter `validate_rig()`, `validate_skin()`, `_bone_indices_named()`, `_serialize_transform()`, or `_quantized()`.
 
-- [ ] **Step 4: Run Task B GREEN and legacy regression**
+- [ ] **Step 6: Run Task B GREEN and legacy regression**
 
 Run:
 
@@ -816,7 +1072,7 @@ Run:
 
 Require pristine GREEN. Compare legacy validator function blobs against `correctionImplementationBase`; they must be byte-identical.
 
-- [ ] **Step 5: Commit Task B**
+- [ ] **Step 7: Commit Task B**
 
 Commit only the contract and mapped-rig test:
 
@@ -966,6 +1222,8 @@ git -C $project commit -m 'test: qualify inspected production rig candidates'
 
 - [ ] **Step 1: Run the complete focused correction gate**
 
+Before launching Godot, require `Test-Path Env:PF_RIG_FACTORY_CONTRACT_PROBE` to be false and record that absence in the focused-gate evidence. If the variable exists, stop before launch rather than clearing it implicitly.
+
 Run:
 
 ```powershell
@@ -1027,7 +1285,7 @@ $importArguments = [string[]]@('--headless', '--editor', '--import', '--quit', '
 & $controller -ExecutablePath $godot -ArgumentVector $importArguments -AppDataPath $importAppData -LocalAppDataPath $importLocalAppData -TimeoutMilliseconds 720000 -StdoutPath (Join-Path $evidenceRoot 'import.stdout.txt') -StderrPath (Join-Path $evidenceRoot 'import.stderr.txt') -ResultPath (Join-Path $evidenceRoot 'import.controller-result.json')
 ```
 
-Use `TimeoutMilliseconds=720000`. Require native exit `0`, no timeout/controller failure, and zero prohibited diagnostics. Inventory the project afterward. Permit only:
+Before invoking the controller, require `PF_RIG_FACTORY_CONTRACT_PROBE` to be absent from the parent environment and therefore absent from the controller's inherited environment; record the absence in command metadata. Do not add that variable to `ProcessStartInfo.Environment`. Use `TimeoutMilliseconds=720000`. Require native exit `0`, no timeout/controller failure, and zero prohibited diagnostics. Inventory the project afterward. Permit only:
 
 - `.godot/**` generated products;
 - source-adjacent `*.gd.uid` additions when the exact `.gd` sibling existed pre-import;
@@ -1048,7 +1306,28 @@ $suiteArguments = [string[]]@('--headless', '--path', $disposableProject, '--scr
 & $controller -ExecutablePath $godot -ArgumentVector $suiteArguments -AppDataPath $suiteAppData -LocalAppDataPath $suiteLocalAppData -TimeoutMilliseconds 720000 -StdoutPath (Join-Path $evidenceRoot 'suite.stdout.txt') -StderrPath (Join-Path $evidenceRoot 'suite.stderr.txt') -ResultPath (Join-Path $evidenceRoot 'suite.controller-result.json')
 ```
 
-Use `TimeoutMilliseconds=720000`. Require native exit `0`, exactly one terminal `TEST_SUMMARY: PASS` with one positive suite count, zero fail markers, zero `TEST_FAILURE` lines, and zero prohibited diagnostic families. Count generic intentional `ERROR:` and `WARNING:` lines separately; do not fail solely on their prefixes. Reinventory the disposable project and reprove authoritative non-mutation.
+Before invoking the controller, require `PF_RIG_FACTORY_CONTRACT_PROBE` to be absent from the parent environment and therefore absent from the controller's inherited environment; record the absence in command metadata and do not add it to `ProcessStartInfo.Environment`. Use `TimeoutMilliseconds=720000`. Require native exit `0`, exactly one terminal `TEST_SUMMARY: PASS` with one positive suite count, zero fail markers, zero `TEST_FAILURE` lines, and zero prohibited diagnostic families.
+
+Use the accepted Step 4B PASS stderr as the normalized known-pass reference:
+
+```text
+C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-step4b-20260901T073118Z-5f5655f4\evidence\full-suite.stderr.txt
+SHA-256 201609952ff70f2b6e9cd5b249f895e52e1da01ff1af4d414a933ad2b312b7a9
+```
+
+Before comparison, also require the accepted reference summary SHA-256 `3a42c8e14669722561202c3b8211a65542d746520cf47ca64ac99bb43a06f382`, analysis SHA-256 `9dd2516d2e086422aad27771a7161bafcfa4a3ff52ab21d80c97a8e525eca2bb`, and marker/diagnostic analysis SHA-256 `ff7507e3249f587340b87be00fd5b5d54e056238a95673111aaabbe7d51520ba`. Reject reference drift. The accepted reference contains 112 `ERROR:` headers, 18 `WARNING:` headers, and 130 `GDScript backtrace` headers; those totals are observations, not a count-only waiver.
+
+Normalize the reference and current suite stderr with the same deterministic algorithm:
+
+1. A diagnostic block begins on a line whose trimmed text starts exactly `ERROR:` or `WARNING:` and continues until the next such header or end of stream.
+2. For each block, create one family key in the form `severity|header|backtrace|first_frame`. Preserve the severity and symbolic reason text. Normalize volatile data in the header by replacing `user://` dynamic suffixes with `user://[dynamic]`, absolute Windows paths with `[absolute-path]`, lowercase 64-character hashes with `[sha256]`, GUIDs with `[guid]`, `res://` line suffixes with `:[line]`, and standalone dynamic numeric values with `[number]`.
+3. Set `backtrace` to `true` only when the block contains `GDScript backtrace`; otherwise set it to `false`. Set `first_frame` to the normalized first `[0]` frame's function and `res://` path with its line removed, or `none` when absent.
+4. Reject every `GDScript backtrace` header that is not consumed by exactly one diagnostic block. Sort family keys ordinally and serialize compact records `{"family":string,"count":integer}` with no BOM and no trailing newline.
+5. Require the current and accepted family multisets to be byte-identical after normalization, including multiplicity. This also requires the observed aggregate counts and backtrace cardinality to remain unchanged.
+
+`INTENTIONAL_NEW_FAMILY_BY_LABEL` is an empty map for this correction checkpoint. Any current family absent from the accepted multiset, any missing accepted family, or any count difference is an unexplained diagnostic and fails closed. A future exact intentional negative-control label may be allowed only by a separately approved plan amendment that supplies its expected normalized family and evidence; no runtime absorption or count-based waiver is permitted. Explicit parser, loader, import, script-compile, engine-crash, fatal, segmentation, object-leak, and RID-leak patterns fail regardless of whether any reference family resembles them.
+
+Preserve the reference/current normalized manifests, hashes, family diff, raw aggregate counts, and exact unmatched records. Reinventory the disposable project and reprove authoritative non-mutation.
 
 - [ ] **Step 8: Obtain a fresh read-only requirements review**
 
@@ -1068,7 +1347,7 @@ Dispatch a different fresh read-only reviewer with this exact interpolated brief
 
 ```powershell
 $qualityBrief = @"
-Review Party Forge production-rig review corrections for code quality only. Do not edit any file and do not repeat the requirements checklist review. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Ignore the twelve pre-implementation documentation/history commits except as provenance. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md and evidence root is $evidenceRoot. Inspect only the exact seven-path product diff plus test and verification evidence. Return PASS or FAIL with exact file:line evidence for: cold-load-safe GDScript typing through explicit preloads; underscore-private state and absence of writable public result state; defensive-copy correctness; factory validation ordering and no partially observable invalid result; exact-path callable loader seam without catalog-held state; existence/load call counts; deterministic category and validator error ordering; loaded Resource reference semantics; Skin and Skeleton3D API correctness; pure duplicate-name handling; byte-identical legacy validate_rig and validate_skin behavior; test isolation without mock-behavior assertions or test-only production APIs; fixture immutability; and commit-based rollback risk. Treat any parser dependence, mutable last-error channel, silent fallback, diagnostic suppression, incomplete negative control, or broader path scope as FAIL. Do not propose edits and do not modify the worktree.
+Review Party Forge production-rig review corrections for code quality only. Do not edit any file and do not repeat the requirements checklist review. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Ignore the thirteen pre-implementation documentation/history commits except as provenance. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md and evidence root is $evidenceRoot. Inspect only the exact seven-path product diff plus test and verification evidence. Return PASS or FAIL with exact file:line evidence for: cold-load-safe GDScript typing through explicit preloads; underscore-private state and absence of writable public result state; defensive-copy correctness; factory validation ordering and no partially observable invalid result; exact-path callable loader seam without catalog-held state; existence/load call counts; deterministic category and validator error ordering; loaded Resource reference semantics; Skin and Skeleton3D API correctness; pure duplicate-name handling; byte-identical legacy validate_rig and validate_skin behavior; test isolation without mock-behavior assertions or test-only production APIs; fixture immutability; and commit-based rollback risk. Treat any parser dependence, mutable last-error channel, silent fallback, diagnostic suppression, incomplete negative control, or broader path scope as FAIL. Do not propose edits and do not modify the worktree.
 "@
 ```
 
@@ -1094,7 +1373,7 @@ Rehash all 77 protected records, both GLBs, fixture JSON, approved specs/plans, 
 Report:
 
 - branch, worktree, `correctionImplementationBase`, four implementation hashes/parents/subjects, and exact seven-path union;
-- all twelve pre-implementation historical commits after the original base without rewriting them;
+- all thirteen pre-implementation historical commits after the original base without rewriting them;
 - A1/A2/B RED and GREEN markers, intentional factory-contract probe, Task C characterization evidence, focused gate, archive hash, import classification, full-suite exit/marker, and two reviewer verdicts;
 - fixture, protected, GLB, spec/plan, Dawn Bulwark, Combat HUD, and sentinel containment;
 - rollback boundaries and remaining risks.
@@ -1135,9 +1414,9 @@ Do not create masculine, feminine, or shared mapping `.tres` files. Do not begin
 - The product union is exactly seven paths; the fixture remains read-only.
 - Every new type, method, parameter, return type, category, message order, resource URI, and commit subject is defined before use.
 - Every production behavior change has a guarded trustworthy RED before implementation; Task C is explicitly a characterization proof and does not manufacture a false RED.
-- Invalid factory behavior uses an isolated intentional-error probe so normal focused and full suites remain diagnostic-clean.
+- Invalid factory behavior uses isolated intentional-error probes; `PF_RIG_FACTORY_CONTRACT_PROBE` is absent from every normal focused, cold-import, and full-suite process.
 - No catalog active state, mutable last-error state, shared fallback, presentation transaction, or mapping resource is introduced.
 - Legacy `validate_rig()` and `validate_skin()` remain byte-identical.
-- Fresh full-suite evidence is generated from a new post-implementation tracked archive and cold import; earlier Step 4B is not reused as proof of future code.
-- History accounting preserves eleven existing commits and treats this plan commit as the twelfth before the dynamic correction baseline.
+- Fresh full-suite evidence is generated from a new post-implementation tracked archive and cold import; earlier Step 4B is used only as the immutable normalized known-pass diagnostic-family reference, never as proof that future code passes.
+- History accounting preserves the original eleven commits, treats the initial corrective plan as commit twelve, and treats this behavior-RED correction as commit thirteen before the dynamic correction baseline.
 - No placeholder terms, vague cross-task references, undefined helper, mismatched type, or unbalanced code fence remains.
