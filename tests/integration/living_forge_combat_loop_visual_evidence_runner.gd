@@ -353,7 +353,7 @@ func _capture_all() -> void:
 	await _capture_extraction(54, &"primary_confirm")
 	await _capture_extraction(55, &"primary_consequence")
 	await _capture_level_up(56, &"primary_confirmation")
-	await _capture_result_state(57, &"resolution")
+	await _capture_result_state(57, &"primary_resolution")
 
 
 func _capture_hud(index: int, count: int, alert_count: int, mode: StringName = &"") -> void:
@@ -649,8 +649,8 @@ func _capture_result_state(index: int, mode: StringName, pending_kind := 0) -> v
 		&"victory", &"defeat", &"expanded": projected = finalized
 		&"save": projection_result = view_model.terminal_save_interrupted(fixture.snapshot, "Terminal record could not be saved. Retry Terminal Save.")
 		&"refresh": projection_result = view_model.terminal_refresh_interrupted(fixture.snapshot, "Terminal state was saved, but recovery could not refresh. Retry Terminal Recovery.")
-		&"resolution":
-			var resolution_reason := "Resolution was interrupted before durable acceptance. Retry Resolution."
+		&"resolution", &"primary_resolution":
+			var resolution_reason := "Run resolution needs another attempt before durable acceptance. Retry Resolution." if mode == &"primary_resolution" else "Resolution was interrupted before durable acceptance. Retry Resolution."
 			projection_result = view_model.resolution_interrupted(fixture.snapshot, resolution_reason, _durable_resolution_safety(fixture, resolution_reason))
 		&"projection": projection_result = view_model.projection_interrupted(fixture.snapshot, fixture.resolution, "Accepted results could not be rebuilt. Retry Results.")
 		&"automatic": projected = _automatic_overflow_projection(view_model, fixture)
@@ -675,7 +675,7 @@ func _capture_result_state(index: int, mode: StringName, pending_kind := 0) -> v
 		_assert(visible_actions == ["RestartRun", "ReturnToForge", "QuitApplication"] and (panel.get_node("Frame/Content/Body") as Control).visible, "%s exposes finalized truth and exact exits" % CAPTURES[index])
 	elif mode == &"save": _assert(visible_actions == ["RetryTerminalSave"], "%s exposes only Retry Terminal Save" % CAPTURES[index])
 	elif mode == &"refresh": _assert(visible_actions == ["RetryTerminalRefresh"], "%s exposes only Retry Terminal Recovery" % CAPTURES[index])
-	elif mode == &"resolution":
+	elif mode in [&"resolution", &"primary_resolution"]:
 		_assert(visible_actions == ["RetryResolution", "OpenArmoury", "ReturnToForge", "QuitApplication"], "%s exposes the exact durable recovery action set" % CAPTURES[index])
 		_assert((panel.get_node("Frame/Content/Footer/Actions/RetryResolution") as Button).has_focus(), "%s retains safe Retry Resolution focus" % CAPTURES[index])
 	elif mode == &"projection": _assert(visible_actions == ["RetryProjection"], "%s exposes only Retry Results" % CAPTURES[index])
