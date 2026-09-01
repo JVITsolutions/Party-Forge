@@ -14,7 +14,7 @@
 - Required branch: `feat/class-preview-character-model-replacement`.
 - Approved design checkpoint before this plan correction: `de6d92fc1f118df4a883d8c1f47e288fa7972482`.
 - Approved design: `docs/superpowers/specs/2026-09-01-production-rig-review-correction-design.md`, SHA-256 `8e05e6cea5978a4ae6fbaa9f130aeee3b58cf7b1fc3d9af0298997483f6d3dcb`.
-- Original implementation base remains `d729b520252c7dc2ad2e9ba7182f63f4c33c27dd`. Exactly fifteen first-parent descendants precede this plan-only correction: the original thirteen commits through `83585052d08aff57a67694acd861cc27d260eb83`, followed by spec-only commits `e8760f1954188c265be4791cd4e30b9b6a0b8211` and `de6d92fc1f118df4a883d8c1f47e288fa7972482`. This plan-only correction becomes commit sixteen and the new dynamic `correctionImplementationBase`; none of the sixteen commits may be rewritten.
+- Original implementation base remains `d729b520252c7dc2ad2e9ba7182f63f4c33c27dd`. Exactly sixteen first-parent descendants precede this probe-expectation correction: the original thirteen commits through `83585052d08aff57a67694acd861cc27d260eb83`, spec-only commits `e8760f1954188c265be4791cd4e30b9b6a0b8211` and `de6d92fc1f118df4a883d8c1f47e288fa7972482`, and plan-only correction `f128cf8e2437a4c8aa7d9cacff119cbf9344ee92`. This plan-only correction becomes commit seventeen and the new dynamic `correctionImplementationBase`; none of the seventeen commits may be rewritten.
 - Task 0 and the A1 missing-file RED are already complete and pristine. The first A1 behavior RED is consumed and untrustworthy; it must never be rerun or presented as behavior evidence. Resume only from the exact stopped paths and evidence recorded below.
 - The approved seven-path product scope is exact. No eighth product path is allowed.
 - `tests/fixtures/presentation/production_rig_inspection_rest_fixtures.json` remains byte-identical at SHA-256 `a0ca9b54b9ea158c4c970cbd36121bfc89fd06d7ed2cff054c032f8e8c21f811`.
@@ -28,7 +28,7 @@
 - Use path preflight and method-shape guards before loading or calling not-yet-created scripts. A missing global class cache, parser failure, loader failure, or invalid project path is never a trustworthy RED.
 - A focused GREEN requires native exit `0`, exactly one terminal `TEST_SUMMARY: PASS (0 failures)`, zero fail markers, and no unexplained parser, loader, import, script, crash, fatal, segmentation, object-leak, or RID-leak diagnostics.
 - A focused RED requires nonzero exit, exactly one terminal `TEST_SUMMARY: FAIL` marker, only the explicitly named assertion failures, and zero infrastructure diagnostics.
-- `PF_RIG_FACTORY_CONTRACT_PROBE` must be absent from every normal focused regression, cold import, and full-suite process. Only Task A1's two isolated intentional-error probes may set it, and each probe must clear it before another process begins.
+- `PF_RIG_FACTORY_CONTRACT_PROBE` must be absent from every normal focused regression, cold import, full-suite process, and future non-probe process. The accepted `invalid_success` probe is permanently consumed and must never be rerun. Only Task A1's remaining separately authorized one-shot `invalid_failure` probe may set the variable, and it must clear the variable immediately after its process ends.
 - No downloads, Blender, 3D Gen Studio, asset import into the authoritative worktree, geometry, rigging, weights, UVs, textures, preview, merge, rebase, push, cleanup, deletion, or publication.
 
 ---
@@ -143,7 +143,7 @@ The first behavior attempt is preserved as `a1-behavior-red-untrustworthy.json` 
 
 - [x] **Step 3: Establish the dynamic resume base through this plan commit**
 
-Before this plan-only correction, require exactly fifteen first-parent commits after `d729b520252c7dc2ad2e9ba7182f63f4c33c27dd`, ending at `de6d92fc1f118df4a883d8c1f47e288fa7972482`. After this plan correction is committed, set `correctionImplementationBase = git rev-parse HEAD` and require exactly sixteen first-parent commits. Record the approved base hash during plan review; do not perform another Task 0 capture and do not require either prospective production file to be absent.
+Before this probe-expectation correction, require exactly sixteen first-parent commits after `d729b520252c7dc2ad2e9ba7182f63f4c33c27dd`, ending at `f128cf8e2437a4c8aa7d9cacff119cbf9344ee92`. After this plan correction is committed, set `correctionImplementationBase = git rev-parse HEAD` and require exactly seventeen first-parent commits. Record the approved base hash during plan review; do not perform another Task 0 capture and do not require either prospective production file to be absent. Task D still requires exactly four implementation commits after this new base.
 
 ---
 
@@ -425,7 +425,7 @@ TestAssertions.equal(recorder.existence_calls, PackedStringArray([MASCULINE_PATH
 TestAssertions.equal(recorder.load_calls, PackedStringArray([MASCULINE_PATH, FEMININE_PATH]), "loader never substitutes load path", failures)
 ```
 
-Add this `PF_RIG_FACTORY_CONTRACT_PROBE` branch before normal assertions. It exercises one invalid factory call per process so the outer focused runner records exactly one intentional script error:
+Add this `PF_RIG_FACTORY_CONTRACT_PROBE` branch before normal assertions. It exercises one invalid factory call per process so the test-local all-error logger captures and validates exactly one intentional factory error while the focused runner receives zero `TEST_FAILURE` entries:
 
 ```gdscript
 var factory_probe := OS.get_environment("PF_RIG_FACTORY_CONTRACT_PROBE")
@@ -484,7 +484,9 @@ loader never substitutes load path
 
 The interface-shape and `RefCounted` return assertions; exact `RESOLUTION_PATH`; non-null loaded `identity_script`; non-null success/failure/rejected results; all three exact `get_script()` identities; all other result assertions; the two neutral feminine loader assertions; and path-table equality must pass. Require zero parser, loader, import, script, engine-crash, segmentation, object-leak, or RID-leak diagnostics. Preserve this new RED separately from both prior evidence sets before replacing either shell. Any extra/missing failure or diagnostic is a stop condition with no retry or improvisation.
 
-- [ ] **Step 6: Replace the result shell with the approved implementation**
+This renewed behavior RED is complete and trustworthy. Preserve `C:\Users\Jacob\AppData\Local\Temp\pf-rig-a1-renewed-red-retry-20260901T101429Z-21433051` byte-for-byte. Its `attempt-result.json` SHA-256 is `46a4a62a2c94c10fdff9865b6326e5ce43d20f57fb252b406b70547a9d910764`, `stdout.txt` SHA-256 is `df17ec1d8491798a340465a05061affd97d57995ddf799cfd79c4b49b90969b2`, and `stderr.txt` SHA-256 is `f8d8d5101a49a2a0397b8993938b5976d6172b827a71d66ca5d8eacc1d34d7b7`. The RED is tied to loader SHA-256 `10b1f6c27e03fc042407b4d824ff941f43a6476d09ccd684e5c7ab4d40207a7d`, neutral resolution SHA-256 `1209d71b3691b2c7e7517b3a796080c5a92a861959f8bd103ae1622842d6d7f1`, and catalog-test SHA-256 `33d72940482ee4c5f6e6114a3596d215b51fa47d10de8d40a22ed42661a5e949`. It must never be rerun.
+
+- [x] **Step 6: Replace the result shell with the approved implementation**
 
 Implement the approved spec exactly. The complete structural content is:
 
@@ -640,7 +642,7 @@ static func _failure_defects(requested_body_preset: StringName, selected_resourc
 
 Both final factories complete all state validation before the single `load(SCRIPT_PATH) as Script`, use the validated `result_script` as the sole allocator, and emit the exact programmer-contract error only when that load is unexpectedly null. The null branch is mandatory production code and a Task D code-quality review item, not a runtime fault-injection test. Do not mutate `SCRIPT_PATH`, edit or copy the source into a modified project, self-preload the script, add a nested replacement class, use a same-file global return annotation, downcast through the global name, return `Variant`, or introduce a production self-loader injection seam to force the branch.
 
-- [ ] **Step 7: Replace the loader shell with the approved implementation**
+- [x] **Step 7: Replace the loader shell with the approved implementation**
 
 Use this complete implementation:
 
@@ -668,20 +670,32 @@ func load_exact(resource_path: String) -> Variant:
 
 The callable constructor is the production dependency seam, not a test-only method. The catalog still receives a loader per call and stores no loader.
 
-- [ ] **Step 8: Run normal A1 GREEN**
+- [x] **Step 8: Run normal A1 GREEN**
 
 Run the Step 2 command with `PF_RIG_FACTORY_CONTRACT_PROBE` absent. Require exit `0`, exactly one `TEST_SUMMARY: PASS (0 failures)`, and zero prohibited diagnostics.
 
-- [ ] **Step 9: Run both isolated intentional factory-contract probes**
+This normal GREEN is complete and accepted. Preserve `C:\Users\Jacob\AppData\Local\Temp\pf-rig-a1-green-20260901T102141Z-ebfda6d3` byte-for-byte. The normal run exited `0` with exactly one `TEST_SUMMARY: PASS (0 failures)`, zero `TEST_FAILURE`, and zero prohibited diagnostics. Its `stdout.txt` SHA-256 is `e92bceedf5114b44fecef4a06363ae9edaafd51908278d8c8d82e38f6b434f44`; its empty `stderr.txt` SHA-256 is `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`. This GREEN is tied to resolution SHA-256 `1a4a45dd64b13d20d7219e1c5e33715e9418f99b88e7064aa0178d3ca55b579d`, loader SHA-256 `ed1a3742e4ecdd57f0da5e38c9a310ef33c52c41c098c8bc19ae848a55b7ec8c`, and catalog-test SHA-256 `33d72940482ee4c5f6e6114a3596d215b51fa47d10de8d40a22ed42661a5e949`.
 
-Run the same focused command once with `PF_RIG_FACTORY_CONTRACT_PROBE=invalid_success`, clear it, then once with `PF_RIG_FACTORY_CONTRACT_PROBE=invalid_failure`, and clear it again. Each process is independently bounded and preserved. Expected native exit is nonzero because the focused runner captures the intentional `push_error`. For each process require:
+- [ ] **Step 9: Preserve accepted invalid-success evidence, then run only the separately authorized invalid-failure probe**
 
-- exactly one terminal `TEST_SUMMARY: FAIL (1 failures)`;
-- the suite's own null and captured-message assertions produce no `TEST_FAILURE`;
-- exactly one captured script error beginning `humanoid rig mapping resolution factory contract failed:`;
-- no parser, loader, import, crash, segmentation, or leak diagnostic.
+The `invalid_success` probe is complete, accepted, and permanently consumed. Do not rerun it. Preserve its evidence under `C:\Users\Jacob\AppData\Local\Temp\pf-rig-a1-green-20260901T102141Z-ebfda6d3\invalid_success`: `stdout.txt` SHA-256 `e92bceedf5114b44fecef4a06363ae9edaafd51908278d8c8d82e38f6b434f44` and `stderr.txt` SHA-256 `01aff071b10fa7765d3e88a117f3de1f7c12545a095de059fc6e0513dc61b471`. The process exited `0` with exactly one terminal `TEST_SUMMARY: PASS (0 failures)`, zero `TEST_FAILURE`, and exactly one intentional factory-contract `ERROR:` block whose ordered reason was:
 
-Preserve this as an intentional programmer-contract probe, not a product RED or GREEN. Clear the environment variable immediately afterward.
+```text
+humanoid rig mapping resolution factory contract failed: success body preset unknown is invalid; success mapping is missing
+```
+
+This PASS marker is the expected negative-control outcome. `tests/focused_test_runner.gd` promotes only `Logger.ERROR_TYPE_SCRIPT` events received by its runner logger into `TEST_FAILURE`. The test-local `tests/support/test_error_capture.gd` logger captures the factory `push_error` category directly, after which the catalog test proves the result is null, exactly one message was captured, and its ordered reason is exact. Because those assertions pass and the intentional error is consumed by the test-local capture boundary, the focused runner correctly reports `PASS (0 failures)`; that PASS must not be mistaken for missing negative-control coverage. The accepted gate record is `C:\Users\Jacob\AppData\Local\Temp\pf-rig-a1-green-20260901T102141Z-ebfda6d3\gate-result.json`, SHA-256 `4055390bb01510d15a3aba1efeb953980a235d40e54db67c5066f97cfe3d039e`.
+
+After this plan correction receives separate Studio Lead review and authorization, run only the remaining `invalid_failure` probe exactly once with `PF_RIG_FACTORY_CONTRACT_PROBE=invalid_failure`, then clear the process environment variable immediately. Do not run `invalid_success` again. The remaining probe is accepted only when:
+
+- native exit is `0`;
+- exactly one terminal `TEST_SUMMARY: PASS (0 failures)` appears;
+- zero `TEST_FAILURE` lines appear;
+- exactly one intentional factory-contract `ERROR:` block appears in stderr with the exact ordered reason `humanoid rig mapping resolution factory contract failed: failure categories are empty; failure messages are empty`;
+- the test-local null-result, captured-message cardinality, and exact ordered-reason assertions pass;
+- zero other parser, loader, import, script-compile, crash, fatal, segmentation, object-leak, or RID-leak diagnostics appear.
+
+Preserve the remaining probe as intentional programmer-contract evidence, not as a product RED or normal GREEN. `PF_RIG_FACTORY_CONTRACT_PROBE` must be absent before and after every future non-probe process and must be proven absent immediately after this one-shot probe.
 
 - [ ] **Step 10: Commit A1**
 
@@ -1370,7 +1384,7 @@ After recording the four commit hashes into `$a1Hash`, `$a2Hash`, `$bHash`, and 
 
 ```powershell
 $requirementsBrief = @"
-Review Party Forge production-rig review corrections for requirements compliance only. Do not edit any file. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Approved design is docs/superpowers/specs/2026-09-01-production-rig-review-correction-design.md at approved SHA-256 8e05e6cea5978a4ae6fbaa9f130aeee3b58cf7b1fc3d9af0298997483f6d3dcb. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md. Evidence root is $evidenceRoot. Product scope is exactly the seven paths listed by the plan. Inspect the base-to-tip diff and evidence. Return PASS or FAIL, mapping every requirement to exact file:line evidence: RefCounted result/catalog interfaces; exact SCRIPT_PATH and single-loaded result_script allocation; non-null success/failure/rejected outputs with exact runtime Script identity; read-only result invariants and no setters; defensive collection copies; invalid factory null/no-result contract; mandatory code-reviewed missing-self-script branch without fault-injection seam; mapping Resource mutability caveat; exact MappingLoader preload typing; exact path-table equality and exact existence/load calls; stable category/message ordering and cardinality; stateless per-call catalog with no active/error history or fallback; pure duplicate-name bind boundary without invalid Skeleton3D construction; public null mapping/skeleton/skin and empty target coverage; both 52-bone fixture candidates with 52 unnamed numeric binds passing validate_mapped_rig; the same candidates failing strict legacy validate_rig and validate_skin; fixture bytes preserved; forbidden resources/sentinels absent; and presentation transaction/rollback still deferred. Report any missing or contradictory evidence as FAIL. Do not review art direction, do not propose implementation, and do not modify the worktree.
+Review Party Forge production-rig review corrections for requirements compliance only. Do not edit any file. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Approved design is docs/superpowers/specs/2026-09-01-production-rig-review-correction-design.md at approved SHA-256 8e05e6cea5978a4ae6fbaa9f130aeee3b58cf7b1fc3d9af0298997483f6d3dcb. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md. Evidence root is $evidenceRoot. Product scope is exactly the seven paths listed by the plan. Inspect the base-to-tip diff and evidence. Return PASS or FAIL, mapping every requirement to exact file:line evidence: RefCounted result/catalog interfaces; exact SCRIPT_PATH and single-loaded result_script allocation; non-null success/failure/rejected outputs with exact runtime Script identity; read-only result invariants and no setters; defensive collection copies; invalid factory null/no-result contract; accepted `invalid_success` and one-shot `invalid_failure` evidence each showing native exit 0, one PASS marker, zero TEST_FAILURE, and one exact test-locally captured ordered contract error; mandatory code-reviewed missing-self-script branch without fault-injection seam; mapping Resource mutability caveat; exact MappingLoader preload typing; exact path-table equality and exact existence/load calls; stable category/message ordering and cardinality; stateless per-call catalog with no active/error history or fallback; pure duplicate-name bind boundary without invalid Skeleton3D construction; public null mapping/skeleton/skin and empty target coverage; both 52-bone fixture candidates with 52 unnamed numeric binds passing validate_mapped_rig; the same candidates failing strict legacy validate_rig and validate_skin; fixture bytes preserved; forbidden resources/sentinels absent; and presentation transaction/rollback still deferred. Report any missing or contradictory evidence as FAIL. Do not review art direction, do not propose implementation, and do not modify the worktree.
 "@
 ```
 
@@ -1382,7 +1396,7 @@ Dispatch a different fresh read-only reviewer with this exact interpolated brief
 
 ```powershell
 $qualityBrief = @"
-Review Party Forge production-rig review corrections for code quality only. Do not edit any file and do not repeat the requirements checklist review. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Ignore the sixteen pre-implementation documentation/history commits except as provenance. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md and evidence root is $evidenceRoot. Inspect only the exact seven-path product diff plus test and verification evidence. Return PASS or FAIL with exact file:line evidence for: cold-load-safe GDScript typing through explicit RigMapping, MappingResolution, and MappingLoader preloads; RefCounted result-return boundaries; one validated result_script load per factory and no repeated-load or time-of-check/time-of-use gap; mandatory deterministic null branch reviewed without source mutation, modified-copy test, or production self-loader injection; underscore-private state and absence of writable public result state; defensive-copy correctness; factory validation ordering and no partially observable invalid result; exact-path callable loader seam without catalog-held state; existence/load call counts; deterministic category and validator error ordering; loaded Resource reference semantics; Skin and Skeleton3D API correctness; pure duplicate-name handling; byte-identical legacy validate_rig and validate_skin behavior; test isolation without mock-behavior assertions or test-only production APIs; fixture immutability; and commit-based rollback risk. Treat any parser dependence, same-file/global-class annotation, global-name downcast, nested result replacement, mutable last-error channel, silent fallback, diagnostic suppression, incomplete negative control, or broader path scope as FAIL. Do not propose edits and do not modify the worktree.
+Review Party Forge production-rig review corrections for code quality only. Do not edit any file and do not repeat the requirements checklist review. Baseline is correctionImplementationBase=$correctionImplementationBase. Review exactly these four implementation commits in order: $a1Hash, $a2Hash, $bHash, $cHash. Ignore the seventeen pre-implementation documentation/history commits except as provenance. Execution plan is docs/superpowers/plans/2026-09-01-production-rig-review-corrections.md and evidence root is $evidenceRoot. Inspect only the exact seven-path product diff plus test and verification evidence. Return PASS or FAIL with exact file:line evidence for: cold-load-safe GDScript typing through explicit RigMapping, MappingResolution, and MappingLoader preloads; RefCounted result-return boundaries; one validated result_script load per factory and no repeated-load or time-of-check/time-of-use gap; mandatory deterministic null branch reviewed without source mutation, modified-copy test, or production self-loader injection; underscore-private state and absence of writable public result state; defensive-copy correctness; factory validation ordering and no partially observable invalid result; exact-path callable loader seam without catalog-held state; existence/load call counts; deterministic category and validator error ordering; intentional factory probes whose test-local all-error logger proves the exact null/message contract while the focused runner correctly retains exit 0 and PASS with zero TEST_FAILURE; loaded Resource reference semantics; Skin and Skeleton3D API correctness; pure duplicate-name handling; byte-identical legacy validate_rig and validate_skin behavior; test isolation without mock-behavior assertions or test-only production APIs; fixture immutability; and commit-based rollback risk. Treat any parser dependence, same-file/global-class annotation, global-name downcast, nested result replacement, mutable last-error channel, silent fallback, diagnostic suppression, incomplete negative control, or broader path scope as FAIL. Do not propose edits and do not modify the worktree.
 "@
 ```
 
@@ -1408,8 +1422,8 @@ Rehash all 77 protected records, both GLBs, fixture JSON, approved specs/plans, 
 Report:
 
 - branch, worktree, `correctionImplementationBase`, four implementation hashes/parents/subjects, and exact seven-path union;
-- all sixteen pre-implementation historical commits after the original base without rewriting them;
-- A1/A2/B RED and GREEN markers, intentional factory-contract probe, Task C characterization evidence, focused gate, archive hash, import classification, full-suite exit/marker, and two reviewer verdicts;
+- all seventeen pre-implementation historical commits after the original base without rewriting them;
+- A1/A2/B RED and GREEN markers, accepted `invalid_success` and one-shot `invalid_failure` factory-contract probe evidence, Task C characterization evidence, focused gate, archive hash, import classification, full-suite exit/marker, and two reviewer verdicts;
 - fixture, protected, GLB, spec/plan, Dawn Bulwark, Combat HUD, and sentinel containment;
 - rollback boundaries and remaining risks.
 
@@ -1421,7 +1435,7 @@ Do not create masculine, feminine, or shared mapping `.tres` files. Do not begin
 
 | Approved correction requirement | Plan task and terminal evidence |
 |---|---|
-| Read-only atomic result, defensive copies, no setters, exact factories, no observable invalid allocation | Task A1 normal GREEN plus the two isolated factory-contract probes. |
+| Read-only atomic result, defensive copies, no setters, exact factories, no observable invalid allocation | Task A1 trustworthy behavior RED, accepted normal GREEN, accepted `invalid_success` probe, and the separately authorized one-shot `invalid_failure` probe. |
 | Cold-safe result construction and runtime identity | Task A1 exact `SCRIPT_PATH`, `RefCounted` method checks, single-loaded `result_script` allocation, and positive success/failure/rejected `get_script()` assertions. |
 | Honest missing-own-script boundary | Task A1 mandatory defensive production branch plus Task D code-quality review; no source mutation, modified copy, runtime fault injection, or production self-loader seam. |
 | Mapping getter returns the same mutable Resource reference without freezing it | Task A1 mutation assertion and Task D requirements review. |
@@ -1452,10 +1466,10 @@ Do not create masculine, feminine, or shared mapping `.tres` files. Do not begin
 - Every new type, method, parameter, return type, category, message order, resource URI, and commit subject is defined before use.
 - Every result-returning A1/A2 interface uses `RefCounted`; catalog loader typing uses only the exact `MappingLoader` preload alias; factories use one validated `result_script` load and allocator.
 - Every production behavior change has a guarded trustworthy RED before implementation; Task C is explicitly a characterization proof and does not manufacture a false RED.
-- Task 0 and the missing-file RED remain completed evidence; the consumed first A1 behavior attempt is never rerun or presented as behavior evidence, and the renewed behavior RED requires a separate authorization after this plan commit.
-- Invalid factory behavior uses isolated intentional-error probes; `PF_RIG_FACTORY_CONTRACT_PROBE` is absent from every normal focused, cold-import, and full-suite process.
+- Task 0 and the missing-file RED remain completed evidence; the consumed first A1 behavior attempt is never rerun or presented as behavior evidence; the renewed eleven-failure behavior RED and normal GREEN remain accepted at their exact evidence hashes and product/test hashes.
+- Invalid factory behavior uses isolated intentional-error probes whose expected runner outcome is native exit `0` with exactly one `TEST_SUMMARY: PASS (0 failures)`, zero `TEST_FAILURE`, and one exact test-locally captured factory-contract `ERROR:` block. The accepted `invalid_success` probe is never rerun; the remaining `invalid_failure` probe requires separate authorization; `PF_RIG_FACTORY_CONTRACT_PROBE` is absent from every normal focused, cold-import, full-suite, and other non-probe process.
 - No catalog active state, mutable last-error state, shared fallback, presentation transaction, or mapping resource is introduced.
 - Legacy `validate_rig()` and `validate_skin()` remain byte-identical.
 - Fresh full-suite evidence is generated from a new post-implementation tracked archive and cold import; earlier Step 4B is used only as the immutable normalized known-pass diagnostic-family reference, never as proof that future code passes.
-- History accounting preserves the original thirteen commits through `83585052...`, spec-only commits fourteen and fifteen (`e8760f19...`, `de6d92fc...`), and this plan-only correction as commit sixteen and the dynamic `correctionImplementationBase`.
+- History accounting preserves the original thirteen commits through `83585052...`, spec-only commits fourteen and fifteen (`e8760f19...`, `de6d92fc...`), plan-only commit sixteen (`f128cf8e...`), and this probe-expectation plan correction as commit seventeen and the dynamic `correctionImplementationBase`. Task D still requires exactly four implementation commits after that base.
 - No placeholder terms, vague cross-task references, undefined helper, mismatched type, or unbalanced code fence remains.
