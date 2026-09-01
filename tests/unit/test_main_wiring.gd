@@ -1563,6 +1563,7 @@ func _test_hud_collapse_preference_persistence(failures: Array[String]) -> void:
     var persisted := PartyForgeSettings.new()
     persisted.hud_party_collapsed = false
     persisted.hud_alerts_collapsed = false
+    persisted.character_hud_background_opacity_percent = 73
     var fixture_store := PartyForgeSettingsStore.new()
     TestAssertions.equal(fixture_store.save_settings(persisted, settings_path), "", "HUD collapse fixture saves expanded preferences", failures)
 
@@ -1577,7 +1578,18 @@ func _test_hud_collapse_preference_persistence(failures: Array[String]) -> void:
     var loaded := fixture_store.load_settings(settings_path)
     TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "Main persists the exact HUD collapse pair", failures)
     TestAssertions.equal([main.saved_settings.hud_party_collapsed, main.saved_settings.hud_alerts_collapsed], [true, false], "Main replaces authoritative settings after a successful HUD preference save", failures)
+    TestAssertions.equal(loaded.character_hud_background_opacity_percent, 73, "HUD collapse persistence preserves unrelated opacity on disk", failures)
+    TestAssertions.equal(main.saved_settings.character_hud_background_opacity_percent, 73, "HUD collapse persistence preserves unrelated authoritative opacity", failures)
     var committed_bytes := FileAccess.get_file_as_bytes(settings_path)
+
+    var restored_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(restored_main, settings_path)
+    TestAssertions.equal([restored_main.saved_settings.hud_party_collapsed, restored_main.saved_settings.hud_alerts_collapsed], [true, false], "second Main boot loads the persisted HUD collapse pair", failures)
+    TestAssertions.truthy(restored_main.call("select_leader_class", &"fighter"), "second Main starts a real run from the persisted settings", failures)
+    var restored_hud := restored_main.get_node("HUD") as HUD
+    TestAssertions.equal([restored_hud.party_collapsed(), restored_hud.alerts_collapsed()], [true, false], "second Main restores the persisted pair into the new HUD without manual hydration", failures)
+    TestAssertions.equal(int(restored_hud.get("_character_hud_background_opacity_percent")), 73, "second Main restores unrelated opacity into the new HUD", failures)
+    _cleanup_main(restored_main)
 
     main.settings_store = PartyForgeSettingsStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
     hud.apply_collapse_preferences(false, true)
@@ -1594,8 +1606,10 @@ func _test_hud_collapse_preference_persistence(failures: Array[String]) -> void:
 
     loaded = fixture_store.load_settings(settings_path)
     TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "failed HUD preference save preserves the prior disk pair", failures)
+    TestAssertions.equal(loaded.character_hud_background_opacity_percent, 73, "failed HUD preference save preserves unrelated opacity on disk", failures)
     TestAssertions.equal(FileAccess.get_file_as_bytes(settings_path), committed_bytes, "failed HUD preference save preserves the committed settings bytes", failures)
     TestAssertions.equal([main.saved_settings.hud_party_collapsed, main.saved_settings.hud_alerts_collapsed], [true, false], "failed HUD preference save preserves Main's authoritative settings", failures)
+    TestAssertions.equal(main.saved_settings.character_hud_background_opacity_percent, 73, "failed HUD preference save preserves unrelated authoritative opacity", failures)
     TestAssertions.equal([hud.party_collapsed(), hud.alerts_collapsed()], [false, true], "failed HUD preference save preserves the toggled session presentation", failures)
 
     main.free()
