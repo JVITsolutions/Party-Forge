@@ -1103,7 +1103,7 @@ This plan's Task 4 is verification-only and is unrelated to the original product
 - Read-only audit scope: all eight tracked paths listed in the File Responsibility Map.
 
 **Interfaces:**
-- Consumes: the three independently committed Task 1-3 implementation deliverables plus the four separately audited Task 2 sequencing, Task 3 RED, Task 3 cold type-resolution, and Task 4 cold-import qualification plan corrections.
+- Consumes: the three independently committed Task 1-3 implementation deliverables plus the five separately audited Task 2 sequencing, Task 3 RED, Task 3 cold type-resolution, Task 4 cold-import qualification, and Task 4 PNG-import-metadata classification plan corrections.
 - Produces: task-owned disposable import products, verification evidence, and a stop-gate report only; it does not create an authoritative-repository artifact, mapping resource, asset, import product, or integration commit.
 
 **Verified reason for this correction:**
@@ -1111,6 +1111,9 @@ This plan's Task 4 is verification-only and is unrelated to the original product
 - The first direct tracked-only failure is preserved under `C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-contract-20260901T052815Z-2c1b356b`. Its immutable `tracked.zip` SHA-256 is `d41b59ed7e12ac5c78b9c9eb6492eab293b531fbff887173f6b5a6b896469367`. Without `.godot/global_script_class_cache.cfg`, `tests/test_runner.gd:19` could not resolve tracked `class_name` types, then faulted before either quit branch. The released `full-suite-result.json` SHA-256 is `598f4dc8eff3bcb08e5776feb257f4affca3ff8f11e4e1792080e7bfe08215a2`.
 - The one-variable diagnostic is preserved under `C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-class-cache-diagnostic-20260901T054001Z-3e1fa3a6`. Seeding only the known global class cache removed the original type-resolution failures, but the run then emitted 792 `No loader found for resource` diagnostics because generated texture import products were absent. It created no additional `.godot` product. The diagnostic `result.json` SHA-256 is `644c1a874a2284ab5d703138a9bcd4d0f72c183e08f03efd116d9bb9ea0f58f6`, and `diagnostic-outcome.md` SHA-256 is `6bc761dc0af33a7d5b27654ca6d9650b6bfa5b96ea07cdc1c70f63c19be14364`.
 - These failures prove that a raw direct tracked-only runtime is not a valid qualification of this Godot project. Task 4 therefore qualifies a brand-new expansion of the immutable tracked archive after exactly one reproducible cold Godot registration/import pass. It does not call that result raw tracked-only execution.
+- The successful cold import is preserved under `C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-cold-import-20260901T061311Z-e3234542`. Its `evidence/import-delta-classification.json` SHA-256 is `00b83462494e50a63146ac0c0e47d2f0bc482115f29a0e0fab044a84dd3c3986`. The import exited 0 with no error, warning, or prohibited diagnostic; no pre-import file changed or disappeared. The original strict classifier accepted 1,428 `.godot` entries and 73 source-adjacent `*.gd.uid` files, then stopped on exactly 682 otherwise-unclassified additions.
+- Independent evidence review established that all 682 additions are regular `*.png.import` files, every exact PNG sibling existed as a regular pre-import file, each sidecar's single `[deps]` `source_file` equals that sibling's `res://` URI, every declared `[remap]` path and `[deps]` `dest_files` target is normalized beneath `res://.godot/imported/`, and every target exists in the post-import inventory. It found zero missing, unsafe, mismatched, absolute, external, traversal, or unexplained resource reference. The matching ignored sidecars already present in the authoritative worktree are byte-identical to the disposable outputs, and `.gitignore` contains `*.png.import`; those two facts are repository-hygiene observations only and are not acceptance inputs for this checkpoint.
+- Preserve every existing file in that successful evidence root byte-for-byte. The already preserved Step 1 focused gate remains valid while authoritative HEAD and tracked implementation scope remain unchanged. Resume at Step 3A; do not rerun Steps 1-3 or run another cold import.
 
 - [ ] **Step 1: Re-run the complete focused checkpoint gate**
 
@@ -1169,18 +1172,44 @@ After exit, record `$verifyRoot\post-import-inventory.json` using the same compl
 
 - every pre-import file remains present with identical byte length and SHA-256;
 - no pre-import directory or file was deleted;
-- every added path is classified deterministically as either the `.godot` directory, a `.godot/**` descendant, or a source-adjacent `*.gd.uid` whose exact sibling `.gd` file existed in the pre-import manifest;
+- every added path is classified deterministically as the `.godot` directory, a `.godot/**` descendant, a source-adjacent `*.gd.uid` whose exact sibling `.gd` file existed in the pre-import manifest, or the exact `source_adjacent_png_import_metadata` class defined below;
 - no added `*.gd.uid` is accepted without that exact pre-existing `.gd` sibling;
-- no added path exists outside those two classes;
+- `source_adjacent_png_import_metadata` accepts only a new regular file whose case-sensitive relative-path suffix is `.png.import`; removing the final `.import` must yield the exact case-sensitive path of a pre-import regular `.png` file;
+- parse accepted PNG sidecars as UTF-8 text without executing or loading them as Godot resources. Track section headers exactly. Require exactly one `source_file="..."` assignment in `[deps]`, and require its value to equal `res://` plus the sibling PNG relative path exactly;
+- collect every `path="..."` and `path.<feature>="..."` value in `[remap]` plus every quoted resource value in the single `dest_files=[...]` assignment in `[deps]`. Require at least one declared imported target. Normalize each URI by requiring the `res://` prefix, forward slashes only, no empty, `.`, or `..` path segment, no drive prefix, colon, backslash, NUL, percent-encoded separator, absolute path, or external scheme, and exact round-trip equality after joining its segments;
+- require every declared imported target to be strictly beneath `res://.godot/imported/` with a nonempty leaf and to exist as a regular file in the post-import inventory. Scan every quoted `res://` string in the sidecar; reject the sidecar unless each reference is either the exact approved `source_file` or one of those declared imported targets;
+- require the PNG sidecar to be absent from the pre-import inventory and present only as an addition in the post-import inventory. Existing-file overwrite, missing sibling, missing or repeated `source_file`, missing target declaration, missing target file, malformed assignment, unsafe URI, or unexplained resource reference fails closed;
+- do not accept SVG, GLB, audio, font, arbitrary `*.import`, a non-PNG sibling, or any other source-adjacent metadata under this class;
+- no added path exists outside these three generated classes;
 - every generated path exists only in the disposable `$trackedProject`;
 - the authoritative repository/worktree received no write and remains at the pre-import branch/HEAD/index and containment state;
 - the immutable archive still has SHA-256 `d41b59ed7e12ac5c78b9c9eb6492eab293b531fbff887173f6b5a6b896469367`.
 
 Write the classification and comparison to `$verifyRoot\import-delta-classification.json`, including each added path, class, attribution source, bytes, and SHA-256. Any changed tracked-source byte, deletion, unexplained path, failed/hung import, or authoritative-tree drift stops Task 4 without a second import or reviewer dispatch.
 
+- [ ] **Step 3A: Reclassify the preserved successful import without another Godot run**
+
+Use only the preserved evidence root `C:\Users\Jacob\AppData\Local\Temp\pf-body-rig-cold-import-20260901T061311Z-e3234542`. Before reading it, require `evidence/import-delta-classification.json` SHA-256 `00b83462494e50a63146ac0c0e47d2f0bc482115f29a0e0fab044a84dd3c3986`, import exit 0, zero error/warning/prohibited diagnostics, zero pre-import deletion, and zero pre-import file-byte/hash change. Do not modify or replace the original pre-import inventory, post-import inventory, log, process, result, classification, or containment evidence.
+
+Read the original `unknown_added` array and require exactly 682 records and 682 distinct case-sensitive relative paths. Validate every record through the exact `source_adjacent_png_import_metadata` contract in Step 3. Require the accepted path set to equal the original 682-path set exactly, zero rejected or unconsumed original path, zero additional accepted path, and zero validation failure.
+
+Write only these new task-owned overlay files under the preserved evidence directory:
+
+~~~text
+evidence/source-adjacent-png-import-metadata-manifest.jsonl
+evidence/source-adjacent-png-import-metadata-manifest.sha256
+evidence/import-delta-reclassification.json
+~~~
+
+Sort accepted records by case-sensitive ordinal `relative_path`. Serialize one compact JSON object per line with keys in this exact order: `relative_path`, `sibling_png_path`, `source_file`, `imported_targets`, `bytes`, `sha256`. Sort each `imported_targets` array by case-sensitive ordinal URI. Encode the JSON Lines manifest as UTF-8 without BOM, join records with LF, and write no trailing newline. Write its lowercase SHA-256 as exactly 64 ASCII hexadecimal characters with no trailing newline to the `.sha256` file.
+
+`import-delta-reclassification.json` must record: the original classification path/hash; pre/post inventory paths/hashes; import result and diagnostic evidence paths/hashes; accepted class name `source_adjacent_png_import_metadata`; expected, observed, accepted, rejected, and unconsumed counts; sorted validation failures; manifest path/hash; the original 1,428 `.godot` and 73 `*.gd.uid` accepted counts; zero deletion/change/unknown counts after overlay; authoritative branch/HEAD/index and 77-file containment; immutable archive/GLB hashes; Dawn Bulwark status; Combat HUD read-only status snapshot; mapping-resource absence; and `pristine = true`. Fail closed without Step 4 if the expected 682-path set, any reference validation, deterministic manifest/hash, evidence immutability, or containment check differs.
+
+The byte-identical ignored `*.png.import` counterparts in the authoritative worktree remain an observation only. Do not copy from them, write them, stage them, commit them, modify `.gitignore`, or broaden this checkpoint into repository import-metadata policy.
+
 - [ ] **Step 4: Run the unchanged full suite in the freshly imported disposable project**
 
-Only after Step 3 is pristine, create a second syntax-validated task-owned wrapper. Set its APPDATA and LOCALAPPDATA to the unused `$verifyRoot\suite-appdata` and `$verifyRoot\suite-localappdata`, then run the unchanged direct command:
+Only after a fresh Step 3 classification is pristine or the preserved evidence's Step 3A overlay is pristine, create a second syntax-validated task-owned wrapper. For the preserved evidence root, require `$verifyRoot\suite-appdata` and `$verifyRoot\suite-localappdata` to be absent or empty, create either missing directory, and require both to be empty immediately before launch. Set the wrapper's APPDATA and LOCALAPPDATA to those two fresh directories, then run the unchanged direct command:
 
 ~~~powershell
 & $godot --headless --path $trackedProject --script res://tests/test_runner.gd
@@ -1192,7 +1221,7 @@ The pristine six-suite checkpoint from Step 1 remains the product-specific contr
 
 - [ ] **Step 5: Obtain independent requirements review**
 
-Only after both the cold import and full suite are pristine, enumerate the seven first-parent commits after `implementationBase` into `$task1Commit`, `$planRestCorrectionCommit`, `$task2Commit`, `$planCatalogCorrectionCommit`, `$planCatalogTypeCorrectionCommit`, `$task3Commit`, and `$planColdImportCorrectionCommit`. Require their exact subjects in the order specified by Step 7. Give both reviewers the three implementation hashes and identify all four correction hashes explicitly as approved documentation-only commits to ignore for product-code scope.
+Only after the cold import classification or approved preserved-evidence reclassification and the full suite are pristine, enumerate the eight first-parent commits after `implementationBase` into `$task1Commit`, `$planRestCorrectionCommit`, `$task2Commit`, `$planCatalogCorrectionCommit`, `$planCatalogTypeCorrectionCommit`, `$task3Commit`, `$planColdImportCorrectionCommit`, and `$planPngImportCorrectionCommit`. Require their exact subjects in the order specified by Step 7. Give both reviewers the three implementation hashes and identify all five correction hashes explicitly as approved documentation-only commits to ignore for product-code scope.
 
 Invoke the requesting-code-review skill and give a fresh reviewer this exact scope:
 
@@ -1202,8 +1231,9 @@ $task3Commit after implementationBase ($implementationBase, recorded at
 $baselineEvidencePath) to
 docs/superpowers/specs/2026-09-01-body-specific-production-rig-mapping-amendment-design.md.
 Ignore the separately audited documentation-only commits $planRestCorrectionCommit,
-$planCatalogCorrectionCommit, $planCatalogTypeCorrectionCommit, and
-$planColdImportCorrectionCommit; do not treat any as product implementation scope.
+$planCatalogCorrectionCommit, $planCatalogTypeCorrectionCommit,
+$planColdImportCorrectionCommit, and $planPngImportCorrectionCommit; do not treat
+any as product implementation scope.
 Check every numeric-bind rule, legacy-validator containment, fixed-nine-decimal
 rest byte contract, both approved source/rest identities, catalog selection,
 no-active-mutation behavior, forbidden .tres absence, and original-plan
@@ -1223,7 +1253,8 @@ Review only the same three implementation commits $task1Commit, $task2Commit,
 and $task3Commit after implementationBase ($implementationBase, recorded at
 $baselineEvidencePath). Ignore the separately audited documentation-only commits
 $planRestCorrectionCommit, $planCatalogCorrectionCommit,
-$planCatalogTypeCorrectionCommit, and $planColdImportCorrectionCommit. Review for deterministic error order,
+$planCatalogTypeCorrectionCommit, $planColdImportCorrectionCommit, and
+$planPngImportCorrectionCommit. Review for deterministic error order,
 Godot Skin/Skeleton3D API correctness, duplicate/out-of-range coverage,
 name/index precedence, finite/invertible validation, exact serialization bytes,
 type/signature consistency, stateless catalog behavior, test isolation, and
@@ -1235,7 +1266,7 @@ Any FAIL stops the checkpoint. No unplanned corrective commit is authorized by t
 
 - [ ] **Step 7: Audit exact commits and tracked scope**
 
-Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly seven first-parent commits after implementationBase, in this order:
+Require fbc3f9e8c3d9853ffbf8d3c21944f970ac41231b to remain an ancestor of implementationBase. Then require exactly eight first-parent commits after implementationBase, in this order:
 
 ~~~text
 feat: accept complete numeric production skin binds
@@ -1245,6 +1276,7 @@ docs: make catalog RED diagnostic-free
 docs: make catalog type resolution explicit
 feat: resolve body-specific humanoid rig mappings
 docs: require cold import archive qualification
+docs: classify generated PNG import metadata
 ~~~
 
 Require commits one, three, and six to be the only implementation commits. Their combined changed-path union must be exactly:
@@ -1260,7 +1292,7 @@ tests/unit/test_production_humanoid_rest_signature.gd
 tests/unit/test_production_humanoid_rig_mapping.gd
 ~~~
 
-Audit commits two, four, five, and seven separately and require each changed-path set to equal exactly `docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md`. Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the three implementation commits' combined path union to equal the eight paths above, and the complete `git diff --name-only $implementationBase..HEAD` union to equal those eight paths plus the one corrected-plan path. Require no merge commit. Every diff and containment comparison remains rooted at `implementationBase`; the approved-design ancestor remains provenance only.
+Audit commits two, four, five, seven, and eight separately and require each changed-path set to equal exactly `docs/superpowers/plans/2026-09-01-body-specific-production-rig-mapping-amendment.md`. Require tracked worktree and index clean, `git diff $implementationBase..HEAD --check` exit 0, the three implementation commits' combined path union to equal the eight paths above, and the complete `git diff --name-only $implementationBase..HEAD` union to equal those eight paths plus the one corrected-plan path. Require no merge commit. Every diff and containment comparison remains rooted at `implementationBase`; the approved-design ancestor remains provenance only.
 
 - [ ] **Step 8: Revalidate containment and immutable provenance**
 
@@ -1276,7 +1308,7 @@ Rehash all 77 preserved untracked files against the existing manifest and requir
 
 - [ ] **Step 9: Stop for Studio Lead contract-checkpoint review under Jacob's delegated routine authority**
 
-Report branch, worktree, all seven commit hashes/parents/subjects, the three implementation hashes, all four ignored plan-correction hashes, exact eight-path implementation union, all four separately audited one-path documentation corrections, the preserved impossible-direct-run and single-cache diagnostic evidence, cold-import command/exit/diagnostics/delta classification, Task 2A, Task 2B, and Task 3 RED/GREEN evidence, focused and full-suite markers/exits, two independent review results, fixture provenance, immutable hashes, 77-file containment, protected-worktree drift, and absent sentinels.
+Report branch, worktree, all eight commit hashes/parents/subjects, the three implementation hashes, all five ignored plan-correction hashes, exact eight-path implementation union, all five separately audited one-path documentation corrections, the preserved impossible-direct-run and single-cache diagnostic evidence, cold-import command/exit/diagnostics/original delta classification/PNG-metadata reclassification manifest and hash, Task 2A, Task 2B, and Task 3 RED/GREEN evidence, focused and full-suite markers/exits, two independent review results, fixture provenance, immutable hashes, 77-file containment, protected-worktree drift, and absent sentinels.
 
 Do not create another commit. Do not merge or push. Report the verified pre-resource contract checkpoint to the Studio Lead. The Studio Lead may approve the next routine bounded resource-planning gate under Jacob's delegation; no final visual acceptance, art-direction change, integration, merge, push, or publication is implied.
 
