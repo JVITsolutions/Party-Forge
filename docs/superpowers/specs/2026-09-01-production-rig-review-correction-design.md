@@ -137,11 +137,26 @@ Prospective interface:
 class_name HumanoidRigMappingResolution
 extends RefCounted
 
-var requested_body_preset: StringName
-var selected_resource_path: String
-var mapping: HumanoidRigMapping
-var failure_categories: Array[StringName]
-var error_messages: PackedStringArray
+const _RESOURCE_PATH_BY_BODY_PRESET := {
+	&"masculine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_masculine.tres",
+	&"feminine": "res://data/presentation/humanoid_rigs/pf_humanoid_v1_mixamo52_feminine.tres",
+}
+static var _factory_token := RefCounted.new()
+
+var _requested_body_preset: StringName
+var _selected_resource_path: String
+var _mapping: HumanoidRigMapping
+var _failure_categories: Array[StringName]
+var _error_messages: PackedStringArray
+
+func _init(
+		factory_token: RefCounted,
+		requested_body_preset: StringName,
+		selected_resource_path: String,
+		mapping: HumanoidRigMapping,
+		failure_categories: Array[StringName],
+		error_messages: PackedStringArray
+	) -> void
 
 static func succeeded(
 		requested_body_preset: StringName,
@@ -154,13 +169,32 @@ static func failed(
 		failure_categories: Array[StringName],
 		error_messages: PackedStringArray
 	) -> HumanoidRigMappingResolution
+func get_requested_body_preset() -> StringName
+func get_selected_resource_path() -> String
+func get_mapping() -> HumanoidRigMapping
+func get_failure_categories() -> Array[StringName]
+func get_error_messages() -> PackedStringArray
 func is_success() -> bool
 func rejected_by_mapped_rig(
 		validation_errors: PackedStringArray
 	) -> HumanoidRigMappingResolution
 ```
 
-Instances are created through exact success/failure factory functions; callers do not populate fields piecemeal. Factory inputs are defensively duplicated where arrays are involved.
+The five underscore-prefixed fields are private implementation state. No public property, setter, mutable collection reference, active-result field, or last-error field is exposed. Callers inspect results only through the five `get_*()` methods, `is_success()`, and `rejected_by_mapped_rig()`.
+
+`get_requested_body_preset()` and `get_selected_resource_path()` return scalar values. `get_mapping()` returns the validated `HumanoidRigMapping` Resource reference. The wrapper does not make that Resource immutable: later presentation code must still run `validate_mapped_rig()` against the prepared skeleton and skin and must not treat the wrapper as freezing mapping internals. `get_failure_categories()` and `get_error_messages()` return new defensive duplicates on every call, so caller mutation cannot change stored result state or break category/message cardinality.
+
+Instances are created atomically through `succeeded()` or `failed()`. Each factory first copies every collection input into a local snapshot, validates the complete snapshot against the applicable invariant in deterministic field order, and allocates the result only after validation succeeds. The result's private path table contains the same two exact values as the catalog; prospective tests require the two tables to be equal so the success factory can enforce preset/path consistency without calling the catalog or creating a circular dependency.
+
+The internal constructor requires the private `_factory_token` plus the complete validated state, assigns all five backing fields during initialization, and does not publish `self` during construction. Both factories invoke it only as `HumanoidRigMappingResolution.new(_factory_token, ...)` after validation. Direct `.new()` is not a supported public construction path; a missing or incorrect factory token triggers `assert(false, "humanoid rig mapping resolution constructor is factory-only")` before state assignment. No public API returns the token.
+
+Invalid factory input is also a programmer-contract failure, not a normal catalog-resolution failure. The factory emits exactly one `push_error()` beginning `humanoid rig mapping resolution factory contract failed:` followed by ordered validation details, returns `null`, and allocates no result. It never returns a partially initialized or contradictory wrapper and never converts programmer misuse into one of the runtime resolution categories. Prospective tests capture the intentional factory error through the existing test error-capture boundary and require the exact null result and deterministic message without leaving an unexplained engine diagnostic.
+
+Factory validation order is exact:
+
+- `succeeded()` validates known preset, exact preset/path match, then non-null mapping. It supplies empty category/message snapshots to the constructor.
+- `failed()` duplicates categories and messages, validates non-empty arrays, equal cardinality, each category against the nine-category allowlist in input order, each paired message as non-empty in the same order, exact category shape, then path semantics. Categories 1 through 4 are terminal and must be the sole category. Identity categories 5 through 8 are unique and strictly ascending when combined. Category 9 may repeat once per validator error but may not be mixed with another category. `unknown_body_preset` requires an unknown preset and an empty path; every other category requires a known preset and that preset's exact path. It supplies `mapping = null` to the constructor.
+- If multiple programmer-contract defects are present, the one `push_error()` joins every ordered detail with `; ` and returns `null` before `_init()` is called.
 
 Success has one invariant:
 
@@ -169,7 +203,7 @@ Success has one invariant:
 - `mapping` is non-null;
 - `failure_categories` and `error_messages` are empty.
 
-`is_success()` returns `true` if and only if all four conditions above hold.
+`is_success()` reads only private backing state and returns `true` if and only if all four conditions above hold. Caller-owned arrays previously returned by either collection accessor cannot affect this result.
 
 Failure has one invariant:
 
@@ -210,7 +244,7 @@ Message templates are exact. Braced names below identify the value inserted at t
 
 `preset`, `expected`, and `actual` use their deterministic string representations. `path` is the selected canonical `res://` URI. `actual_type` is `null` only for a failed load and otherwise is the loaded object's Godot class name; the failed-load branch prevents `null` from reaching the wrong-type branch. `validator_error` is the unchanged `HumanoidRigContract` error string.
 
-`rejected_by_mapped_rig()` is a pure result transformation reserved for the later presentation transaction. On a successful result plus non-empty `validation_errors`, it returns a new failed result, retains the preset and selected path, clears the mapping, and appends one `mapped_rig_validation_failed` category for each validator message in original order. It does not mutate the original result or the catalog. Passing an empty validation array returns the unchanged successful result. Calling it on an existing failure returns that failure unchanged. The correction phase may test this value behavior, but it must not claim that a real active visual was preserved.
+`rejected_by_mapped_rig()` is a pure result transformation reserved for the later presentation transaction. It duplicates `validation_errors` before inspection. On a successful result plus non-empty copied errors, it calls `failed()` with private backing-state scalars, retains the preset and selected path, clears the mapping through the failure factory, and supplies one `mapped_rig_validation_failed` category for each validator message in original order. It does not mutate the original result, the caller's array, or the catalog. Passing an empty validation array returns the unchanged successful result. Calling it on an existing failure returns that failure unchanged. The correction phase may test this value behavior, but it must not claim that a real active visual was preserved.
 
 ## Catalog Resolution Algorithm
 
@@ -292,7 +326,9 @@ Current correction tests may prove:
 - deterministic result contents;
 - repeated calls do not contaminate one another;
 - a successful result object is unchanged after a later failed call; and
-- `rejected_by_mapped_rig()` returns a new result instead of mutating its input.
+- `rejected_by_mapped_rig()` returns a new result instead of mutating its input;
+- mutating arrays returned by `get_failure_categories()` or `get_error_messages()` does not alter later accessor results, cardinality, or `is_success()`; and
+- the public API exposes no setter for preset, path, mapping, categories, messages, active state, or last error.
 
 They must not claim to prove:
 
@@ -310,7 +346,7 @@ No file below is authorized in this documentation gate. A later corrective imple
 
 | Path | Prospective responsibility |
 |---|---|
-| `scripts/presentation/humanoid_rig_mapping_resolution.gd` | New structured, per-call resolution result and pure mapped-rig rejection transformation. |
+| `scripts/presentation/humanoid_rig_mapping_resolution.gd` | New factory-created, read-only, structured per-call result with private backing state, defensive accessors, and pure mapped-rig rejection transformation. |
 | `scripts/presentation/humanoid_rig_mapping_loader.gd` | New stateless exact-path `ResourceLoader` adapter. |
 | `scripts/presentation/humanoid_rig_mapping_catalog.gd` | Replace preset-keyed injected mappings with exact-path resolution, loader injection, identity validation, and structured results. |
 | `scripts/presentation/humanoid_rig_contract.gd` | Add the pure bind-identity boundary and route mapped bind resolution through it without altering legacy validators. |
@@ -325,6 +361,10 @@ The fixture JSON does not change. The approved spec, current implementation plan
 A future TDD plan must define trustworthy RED before each production change. It must preserve the existing fixed-nine-decimal serializer tests and all prior numeric-bind/legacy regressions. New tests must prove:
 
 - the result success/failure invariants and one-to-one category/message arrays;
+- the result's private preset/path table remains byte-for-byte equal to the catalog's public `RESOURCE_PATH_BY_BODY_PRESET` table;
+- invalid success/failure factory inputs produce the exact programmer-contract error and `null` without allocating an observable result;
+- the result exposes only read accessors, collection accessors return defensive duplicates, and caller mutation cannot change stored categories, messages, cardinality, or `is_success()`;
+- `get_mapping()` returns the validated Resource reference without claiming to freeze that Resource's mutable internals;
 - exact category order and exact requested path for every catalog failure;
 - zero loader calls for unknown presets;
 - one existence call and zero load calls for missing resources;
@@ -372,4 +412,4 @@ This amendment does not authorize:
 - presentation transactions, active-body mutation, Godot integration, previews, or runtime asset promotion;
 - suite execution, reviewer dispatch, merge, rebase, push, cleanup, deletion, publication, or Task 5 work.
 
-This gate ends after one new design file is committed and its exact scope, preservation hashes, protected-worktree snapshots, and absent sentinels are verified. The next gate is written-spec review. Writing-plans and implementation do not start automatically.
+This gate ends after this one-file design correction is committed separately from `78893389adc084bc376fb82eb1ba267e11e35c79` and its exact scope, API/type consistency, factory invariants, defensive-copy behavior, absence of mutable last-error state, preservation hashes, protected-worktree snapshots, and absent sentinels are verified. The next gate is renewed written-spec review. Writing-plans and implementation do not start automatically.
