@@ -10,6 +10,16 @@ var _coordinator_script: Script
 var _parties: Array[PartyManager] = []
 var _actors: Array[Node3D] = []
 
+class SyntheticIneligibleSuccessRollService extends PersonalLootRollService:
+	var decision: PersonalLootDecision
+
+	func resolve(
+		_event: EnemyDefeatEvent,
+		_force_success_override: bool = false,
+		_drop_multiplier_override: float = NAN,
+	) -> Array[PersonalLootDecision]:
+		return [decision.copy()]
+
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_load_contracts(failures)
@@ -18,6 +28,7 @@ func run() -> Array[String]:
 	_test_two_successes_use_exact_independent_production_requests(failures)
 	_test_one_owner_failure_does_not_block_another(failures)
 	_test_heat_context_matches_decision_request_and_provenance(failures)
+	_test_ineligible_success_flag_never_reaches_generation(failures)
 	_cleanup()
 	return failures
 
@@ -131,6 +142,36 @@ func _test_heat_context_matches_decision_request_and_provenance(failures: Array[
 		TestAssertions.equal(generation["item_level"], decisions[0].item_level, "generation provenance records the exact request item level", failures)
 		TestAssertions.equal(float(generation["heat"]), 8.0, "generation request and provenance record exact nonzero Heat", failures)
 		TestAssertions.equal(generation["difficulty_id"], "normal", "generation request and provenance remain on the supported normal difficulty", failures)
+
+func _test_ineligible_success_flag_never_reaches_generation(failures: Array[String]) -> void:
+	var contexts := RunContextRegistry.new()
+	var context := _context(&"feature_locked_player", "profile-feature-locked", 0, &"red", 54101)
+	assert(contexts.register_context(context).ok())
+	var identities := LocalPlayerIdentityService.new().assign(contexts.all_contexts())
+	var malicious := PersonalLootDecision.new()
+	malicious.run_player_id = context.run_player_id
+	malicious.profile_id = context.profile_id
+	malicious.player_slot = context.player_slot_index
+	malicious.eligible = false
+	malicious.success = true
+	malicious.reason = &"feature_locked"
+	malicious.generation_seed = 12345
+	malicious.generation_sequence = 84
+	malicious.item_level = 10
+	var roll := SyntheticIneligibleSuccessRollService.new()
+	roll.decision = malicious
+	roll.difficulty_id = &"normal"
+	roll.heat = 0.0
+	var registry := GroundItemRegistry.new()
+	var coordinator := PersonalLootDropCoordinator.new()
+	assert(coordinator.configure(roll, contexts, identities.identities(), GameCatalog.EQUIPMENT_CATALOG, GameCatalog.ITEM_FOUNDATION_CATALOG, registry).is_empty())
+	var before := context.item_state().to_dictionary()
+	var report := coordinator.resolve_defeat(EnemyDefeatEvent.create(54101, 84, 840, &"swarmer", &"ordinary_melee", Vector3.ZERO, 10.0))
+	TestAssertions.equal(report.get("spawned_drop_ids", []), [], "ineligible decision cannot generate even when success is corrupted true", failures)
+	TestAssertions.equal(report.get("diagnostics", []), [], "defensive ineligible rejection requires no generation diagnostic", failures)
+	TestAssertions.equal(context.item_state().to_dictionary(), before, "ineligible success flag creates no item or owner-ground container mutation", failures)
+	TestAssertions.equal(context.ground_items().occupied_slots(), [], "ineligible success flag occupies no owner-ground slot", failures)
+	TestAssertions.equal(registry.all_records().size(), 0, "ineligible success flag creates no registry record", failures)
 
 func _coordinator_fixture(reverse_registration: bool) -> Dictionary:
 	var contexts := RunContextRegistry.new()

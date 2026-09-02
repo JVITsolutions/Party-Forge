@@ -21,6 +21,7 @@ func run() -> Array[String]:
 	_test_request_is_exact_and_defensive(failures)
 	_test_context_resolution_marker_contract(failures)
 	_test_service_type_exists(failures)
+	_test_city_victory_reward_policy(failures)
 	_test_ordinary_resolution_and_irreversible_loss(failures)
 	_test_automatic_leader_and_ordinary_follower_resolution(failures)
 	_test_automatic_leader_replaces_prior_loadout_without_loss(failures)
@@ -83,6 +84,72 @@ func _test_service_type_exists(failures: Array[String]) -> void:
 	var result := RunResolutionResult.failure("expected")
 	TestAssertions.truthy(not result.ok() and result.error == "expected", "resolution result exposes stable failure", failures)
 	TestAssertions.truthy(RunResolutionService.new() != null, "resolution service is constructible", failures)
+
+func _test_city_victory_reward_policy(failures: Array[String]) -> void:
+	var profile := ProfileState.new_profile(PROFILE_ID, "Victory Policy", 1000)
+	var defeat_before := profile.to_dictionary()
+	TestAssertions.equal(CityVictoryRewardPolicy.apply(profile, RunTerminalSnapshot.Outcome.DEFEAT), "", "defeat is a valid no-reward outcome", failures)
+	TestAssertions.equal(profile.to_dictionary(), defeat_before, "defeat leaves the complete profile unchanged", failures)
+
+	TestAssertions.equal(CityVictoryRewardPolicy.apply(profile, RunTerminalSnapshot.Outcome.VICTORY), "", "first victory reward applies", failures)
+	TestAssertions.equal(profile.discovered_trees, [CityVictoryRewardPolicy.CITY_TREE_ID], "first victory reveals only the City tree", failures)
+	TestAssertions.equal(profile.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID], [CityVictoryRewardPolicy.CITY_ROOT_ID], "first victory seeds the free City root", failures)
+	TestAssertions.equal(profile.passive_points_available, 0, "first victory grants no available point", failures)
+	TestAssertions.equal(profile.passive_points_lifetime_earned, 0, "first victory grants no lifetime point", failures)
+	TestAssertions.equal(profile.prologue_state, ProfileState.PrologueState.NOT_STARTED, "victory reward does not rewrite legacy prologue state", failures)
+	TestAssertions.equal(profile.permanent_feature_unlocks, [], "free City root is not invented as a feature unlock", failures)
+
+	TestAssertions.equal(CityVictoryRewardPolicy.apply(profile, RunTerminalSnapshot.Outcome.VICTORY), "", "later unique victory reward applies", failures)
+	TestAssertions.equal(profile.passive_points_available, 1, "later victory grants exactly one additional available point", failures)
+	TestAssertions.equal(profile.passive_points_lifetime_earned, 1, "later victory grants exactly one additional lifetime point", failures)
+	TestAssertions.equal(profile.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID], [CityVictoryRewardPolicy.CITY_ROOT_ID], "later victory does not duplicate the root", failures)
+
+	var repair := ProfileState.new_profile(PROFILE_ID, "Victory Repair", 1000)
+	repair.discovered_trees = [CityVictoryRewardPolicy.CITY_TREE_ID]
+	repair.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID] = ["legacy-zeta", CityVictoryRewardPolicy.CITY_ROOT_ID, "legacy-alpha", CityVictoryRewardPolicy.CITY_ROOT_ID]
+	TestAssertions.equal(CityVictoryRewardPolicy.apply(repair, RunTerminalSnapshot.Outcome.VICTORY), "", "existing City projection is repaired", failures)
+	TestAssertions.equal(repair.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID], [CityVictoryRewardPolicy.CITY_ROOT_ID, "legacy-alpha", "legacy-zeta"], "City allocation repair is unique lexical and preserves unknown IDs", failures)
+	TestAssertions.equal(repair.passive_points_available, 1, "repair grants only the normal victory point", failures)
+
+	var missing_root := ProfileState.new_profile(PROFILE_ID, "Victory Missing Root", 1000)
+	missing_root.discovered_trees = [CityVictoryRewardPolicy.CITY_TREE_ID]
+	missing_root.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID] = ["legacy-node"]
+	TestAssertions.equal(CityVictoryRewardPolicy.apply(missing_root, RunTerminalSnapshot.Outcome.VICTORY), "", "victory repairs a discovered City with no root", failures)
+	TestAssertions.equal(missing_root.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID], [CityVictoryRewardPolicy.CITY_ROOT_ID, "legacy-node"], "missing-root repair seeds City Heart and preserves unknown IDs", failures)
+	TestAssertions.equal(missing_root.passive_points_available, 1, "missing-root repair grants only the normal victory point", failures)
+
+	var malformed := ProfileState.new_profile(PROFILE_ID, "Malformed Victory", 1000)
+	malformed.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID] = "not-an-array"
+	var malformed_before := malformed.to_dictionary()
+	var malformed_error := CityVictoryRewardPolicy.apply(malformed, RunTerminalSnapshot.Outcome.VICTORY)
+	TestAssertions.truthy(malformed_error.contains("tree_allocations"), "malformed City allocation rejects with a field diagnostic", failures)
+	TestAssertions.equal(malformed.to_dictionary(), malformed_before, "malformed City allocation rejection is mutation-free", failures)
+
+	var malformed_member := ProfileState.new_profile(PROFILE_ID, "Malformed Victory Member", 1000)
+	malformed_member.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID] = [CityVictoryRewardPolicy.CITY_ROOT_ID, 7]
+	var malformed_member_before := malformed_member.to_dictionary()
+	var malformed_member_error := CityVictoryRewardPolicy.apply(malformed_member, RunTerminalSnapshot.Outcome.VICTORY)
+	TestAssertions.truthy(malformed_member_error.contains("tree_allocations"), "non-string City allocation rejects with a field diagnostic", failures)
+	TestAssertions.equal(malformed_member.to_dictionary(), malformed_member_before, "non-string City allocation rejection is mutation-free", failures)
+
+	var overflow := ProfileState.new_profile(PROFILE_ID, "Overflow Victory", 1000)
+	overflow.discovered_trees = [CityVictoryRewardPolicy.CITY_TREE_ID]
+	overflow.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID] = [CityVictoryRewardPolicy.CITY_ROOT_ID]
+	overflow.passive_points_available = ProfileCodec.JSON_SAFE_INTEGER_MAX
+	overflow.passive_points_lifetime_earned = ProfileCodec.JSON_SAFE_INTEGER_MAX
+	var overflow_before := overflow.to_dictionary()
+	var overflow_error := CityVictoryRewardPolicy.apply(overflow, RunTerminalSnapshot.Outcome.VICTORY)
+	TestAssertions.truthy(overflow_error.contains("passive_points") and overflow_error.contains("overflow"), "victory point overflow rejects explicitly", failures)
+	TestAssertions.equal(overflow.to_dictionary(), overflow_before, "victory overflow rejection is mutation-free", failures)
+
+	var lifetime_overflow := ProfileState.new_profile(PROFILE_ID, "Lifetime Overflow Victory", 1000)
+	lifetime_overflow.discovered_trees = [CityVictoryRewardPolicy.CITY_TREE_ID]
+	lifetime_overflow.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID] = [CityVictoryRewardPolicy.CITY_ROOT_ID]
+	lifetime_overflow.passive_points_lifetime_earned = ProfileCodec.JSON_SAFE_INTEGER_MAX
+	var lifetime_overflow_before := lifetime_overflow.to_dictionary()
+	var lifetime_overflow_error := CityVictoryRewardPolicy.apply(lifetime_overflow, RunTerminalSnapshot.Outcome.VICTORY)
+	TestAssertions.truthy(lifetime_overflow_error.contains("passive_points") and lifetime_overflow_error.contains("overflow"), "lifetime point overflow rejects explicitly", failures)
+	TestAssertions.equal(lifetime_overflow.to_dictionary(), lifetime_overflow_before, "lifetime overflow rejection is mutation-free", failures)
 
 func _test_ordinary_resolution_and_irreversible_loss(failures: Array[String]) -> void:
 	var fixture := _fixture("ordinary", 3, [], true)

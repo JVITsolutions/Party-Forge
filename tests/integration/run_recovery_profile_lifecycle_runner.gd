@@ -1,6 +1,7 @@
 extends SceneTree
 
 const SCREENSHOT_ROOT := "res://docs/validation/screenshots/run-recovery-profile-lifecycle"
+const CITY_TREE_ID := "party-forge-city-v1"
 
 var _failures: Array[String] = []
 var _fixture_counter := 0
@@ -155,6 +156,8 @@ func _abandonment_scenario() -> void:
 	var run_item_ids := _recovery_item_ids(checked_out)
 	_assert(not run_id.is_empty(), "abandon fixture persists an exact run id")
 	_assert(not run_item_ids.is_empty(), "abandon fixture owns at least one run item")
+	_assert(checked_out.passive_points_available == 0 and checked_out.passive_points_lifetime_earned == 0, "active pre-abandon run has no victory passive points")
+	_assert(CITY_TREE_ID not in checked_out.discovered_trees and not checked_out.tree_allocations.has(CITY_TREE_ID), "active pre-abandon run has not revealed or rooted City")
 	await _free_main(main)
 
 	main = await _new_main(paths)
@@ -195,6 +198,8 @@ func _abandonment_scenario() -> void:
 	await _frames(5)
 	var forfeited := _load_profile(profile_id, paths.profile_root)
 	_assert(forfeited != null and forfeited.resumable_run == {}, "confirmed matching abandonment durably clears the exact recovery")
+	_assert(forfeited != null and forfeited.passive_points_available == 0 and forfeited.passive_points_lifetime_earned == 0, "confirmed abandonment grants no passive points")
+	_assert(forfeited != null and CITY_TREE_ID not in forfeited.discovered_trees and not forfeited.tree_allocations.has(CITY_TREE_ID), "confirmed abandonment neither reveals City nor seeds City Heart")
 	var durable_text := JSON.stringify(forfeited.to_dictionary()) if forfeited != null else ""
 	for instance_id: String in run_item_ids:
 		_assert(not durable_text.contains(instance_id), "confirmed matching abandonment removes run-owned item %s from all profile storage" % instance_id)

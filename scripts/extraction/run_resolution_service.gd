@@ -71,6 +71,9 @@ func resolve_terminal_source(
 			return evaluation.error if evaluation != null else _error("field=evaluation reason=must be available")
 		accepted_holder["extraction"] = evaluation.extraction
 		protected_holder["ids"] = record.protected_displaced_item_ids
+		var reward_error := CityVictoryRewardPolicy.apply(candidate, record.snapshot.outcome)
+		if not reward_error.is_empty():
+			return reward_error
 		return terminal_recovery.mark_resolved_candidate(candidate, request, evaluation.extraction)
 	var mutation := _mutations.apply_with_resumable_run_revocation(
 		profile_id, request.transaction_id, request.run_id, terminal_mutation,
@@ -78,7 +81,7 @@ func resolve_terminal_source(
 	)
 	if not mutation.ok():
 		var rejected := evaluation_holder.get("evaluation") as RunResolutionEvaluation
-		if rejected != null:
+		if rejected != null and not rejected.ok():
 			return RunResolutionResult.failure(mutation.error, rejected.failure_category, rejected.player_reason)
 		return RunResolutionResult.failure(mutation.error)
 	var accepted := accepted_holder.get("extraction") as RunExtractionProjection

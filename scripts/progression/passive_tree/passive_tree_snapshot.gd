@@ -34,7 +34,8 @@ static func build(
 				_append_unique(snapshot.implicit_start_nodes, starting_id)
 	_sort_node_ids(snapshot.implicit_start_nodes)
 
-	if developer_reveal:
+	var discovered := String(tree.id) in profile.discovered_trees
+	if developer_reveal or (discovered and tree.id == PassiveTreeActivationPolicy.CITY_TREE_ID):
 		for tree_node: PassiveTreeNode in tree.nodes:
 			_append_unique(snapshot.visible, tree_node.id)
 		_sort_node_ids(snapshot.visible)

@@ -26,12 +26,22 @@ func _run() -> void:
 	_cleanup_main(player)
 	ProfileTestSupport.remove_tree(PROFILE_ROOT)
 
+	var unlocked_player := await _started_main(PartyForgeSettings.new(), true)
+	await _verify_enemy_defeat(unlocked_player, true)
+	_cleanup_main(unlocked_player)
+	ProfileTestSupport.remove_tree(PROFILE_ROOT)
+
 	var developer_settings := PartyForgeSettings.new()
 	developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
 	developer_settings.unlock_all_implemented_content = true
 	var developer := await _started_main(developer_settings)
+	var developer_profile_id: String = developer.active_profile().profile_id
+	var developer_before := ProfileStore.new().load_profile(developer_profile_id, PROFILE_ROOT).profile
 	await _verify_enemy_defeat(developer, true)
-	_verify_guardian_victory_and_zero_reward(developer)
+	var developer_after := ProfileStore.new().load_profile(developer_profile_id, PROFILE_ROOT).profile
+	_assert(developer_before.permanent_feature_unlocks == developer_after.permanent_feature_unlocks, "Developer Unlock All drop adds no durable feature unlock")
+	_assert(developer_before.inventory_columns == developer_after.inventory_columns, "Developer Unlock All temporary capacity adds no durable inventory column")
+	await _verify_guardian_victory_and_zero_reward(developer)
 	_cleanup_main(developer)
 	ProfileTestSupport.remove_tree(PROFILE_ROOT)
 	_cleanup_settings()
@@ -41,6 +51,10 @@ func _verify_enemy_defeat(main: Node, expect_drop: bool) -> void:
 	var director := main.get_node("SpawnDirector") as SpawnDirector
 	var roll := main.get("personal_loot_roll_service") as PersonalLootRollService
 	var registry := main.get("ground_item_registry") as GroundItemRegistry
+	var profile_before := main.active_profile() as ProfileState
+	var gold_before := profile_before.gold
+	var passive_points_available_before := profile_before.passive_points_available
+	var passive_points_lifetime_before := profile_before.passive_points_lifetime_earned
 	_assert(roll != null and registry != null, "run creates the live personal-loot service graph")
 	if roll == null or registry == null:
 		return
@@ -60,6 +74,9 @@ func _verify_enemy_defeat(main: Node, expect_drop: bool) -> void:
 	enemy.defeat()
 	_assert(_experience_orb_count(main.get_node("Effects")) == orb_count_before + 1, "repeated defeat preserves exactly one XP reward")
 	_assert(registry.all_records().size() == (1 if expect_drop else 0), "feature access produces the expected owner-scoped ground record")
+	var profile_after := main.active_profile() as ProfileState
+	_assert(profile_after.gold == gold_before, "ordinary enemy item gating leaves profile gold unchanged")
+	_assert(profile_after.passive_points_available == passive_points_available_before and profile_after.passive_points_lifetime_earned == passive_points_lifetime_before, "ordinary enemy item gating leaves passive-point rewards unchanged")
 	if expect_drop:
 		var before_terminal := registry.all_records().size()
 		main.call(&"_show_defeat")
@@ -68,6 +85,11 @@ func _verify_enemy_defeat(main: Node, expect_drop: bool) -> void:
 		_assert(_active_chest_count(main) == before_terminal, "defeat terminal capture retains projected loot while extraction is pending")
 		var flow: Variant = main.get("_terminal_flow")
 		_assert(flow != null and int(flow.call(&"state")) == RunTerminalFlow.State.CHOOSING_EXTRACTION, "defeat terminal capture enters typed extraction choice")
+	else:
+		_assert(_active_chest_count(main) == 0, "feature-locked Player defeat projects no ground chest")
+		var diagnostics := main.get("_ground_chest_diagnostics") as Dictionary
+		var ineligible_reasons := diagnostics.get("ineligible_by_reason", {}) as Dictionary
+		_assert(int(ineligible_reasons.get("feature_locked", 0)) == 1, "feature-locked Player defeat records the stable production diagnostic exactly once")
 
 func _verify_guardian_victory_and_zero_reward(main: Node) -> void:
 	var coordinator := main.get("personal_loot_drop_coordinator") as PersonalLootDropCoordinator
@@ -96,10 +118,18 @@ func _verify_guardian_victory_and_zero_reward(main: Node) -> void:
 	var extraction := main.get_node_or_null("HUD/TerminalExtraction") as TerminalExtractionPanel
 	if flow != null and extraction != null:
 		extraction.confirm_requested.emit()
-		_guardian_assert(int(flow.call(&"state")) == RunTerminalFlow.State.FINALIZED, "Guardian extraction confirmation reaches one accepted durable recap")
+		var finalized := await _wait_for_terminal_state(flow, RunTerminalFlow.State.FINALIZED)
+		_guardian_assert(finalized, "Guardian extraction confirmation reaches one accepted durable recap")
 		_guardian_assert(registry.all_records().is_empty(), "Guardian accepted durable recap clears prior run-owned loot exactly once")
 
-func _started_main(settings: PartyForgeSettings) -> Node:
+func _wait_for_terminal_state(flow: Variant, expected_state: int, maximum_frames: int = 120) -> bool:
+	for _frame: int in maximum_frames:
+		if flow != null and int(flow.call(&"state")) == expected_state:
+			return true
+		await process_frame
+	return flow != null and int(flow.call(&"state")) == expected_state
+
+func _started_main(settings: PartyForgeSettings, grant_player_item_access: bool = false) -> Node:
 	var main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate() as Node
 	main.profile_root = PROFILE_ROOT
 	main.settings_path = SETTINGS_PATH
@@ -108,6 +138,12 @@ func _started_main(settings: PartyForgeSettings) -> Node:
 	var manager := main.profile_manager as ProfileManager
 	if manager.active_profile() == null:
 		manager.create_profile("Personal Loot Integration")
+	if grant_player_item_access:
+		var profile := manager.active_profile()
+		profile.permanent_feature_unlocks = ["equipment_inventory", "inventory"]
+		profile.inventory_columns = 1
+		_assert(ProfileStore.new().save_profile(profile, PROFILE_ROOT).is_empty(), "unlocked Player fixture persists both item features and one inventory column")
+		_assert(manager.refresh_profile(profile.profile_id).is_empty(), "unlocked Player fixture refreshes the authoritative profile")
 	main.saved_settings = settings.copy()
 	_assert(main.select_leader_class(&"fighter"), "configured profile starts the arena run")
 	return main

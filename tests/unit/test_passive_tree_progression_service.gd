@@ -15,6 +15,8 @@ const MESSAGES := {
 	&"retained_path_disconnected": "Refunding this node would disconnect an allocated path.",
 	&"retained_requirement_failed": "Refunding this node would break another allocated node's requirements.",
 	&"unsupported_connection_semantics": "This passive tree uses unsupported connection rules.",
+	&"future_node": "Coming Soon",
+	&"district_target_missing": "District tree not installed",
 }
 
 func run() -> Array[String]:
@@ -22,6 +24,7 @@ func run() -> Array[String]:
 	_test_allocation_rejections_are_stable(failures)
 	_test_extraction_license_requires_both_prerequisites(failures)
 	_test_leader_loadout_extraction_requires_secured_path(failures)
+	_test_authored_activation_and_live_portal_health(failures)
 	_test_directed_connectivity_and_implicit_roots(failures)
 	_test_unresolved_same_tree_ids_do_not_satisfy_requirements(failures)
 	_test_cross_tree_saved_ids_fail_closed_without_authoritative_definition(failures)
@@ -87,7 +90,7 @@ func _test_extraction_license_requires_both_prerequisites(failures: Array[String
 	TestAssertions.equal(accepted.point_delta, -3, "Extraction License spends its exact cost", failures)
 
 func _test_leader_loadout_extraction_requires_secured_path(failures: Array[String]) -> void:
-	var result := PassiveTreeLoader.new().load_path("res://data/passive_trees/city/party-forge-city.pstree.json")
+	var result := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(result.ok(), "committed City artifact loads for leader extraction allocation", failures)
 	if not result.ok():
 		return
@@ -99,6 +102,41 @@ func _test_leader_loadout_extraction_requires_secured_path(failures: Array[Strin
 	_assert_decision(accepted, &"ok", true, "Leader Loadout Extraction allocates after Secured Loadout", failures)
 	TestAssertions.equal(accepted.point_delta, -1, "Leader Loadout Extraction spends one Passive Point", failures)
 	TestAssertions.equal(accepted.next_allocations, [&"city-heart", &"extraction-license", &"field-pack", &"leader-loadout-extraction", &"secured-loadout", &"stash-access"], "Leader Loadout Extraction persists the complete path", failures)
+
+func _test_authored_activation_and_live_portal_health(failures: Array[String]) -> void:
+	var implemented_tree := _activation_tree(&"implemented")
+	var implemented_profile := _profile(implemented_tree.id, true, [&"city-heart"], 1)
+	_assert_decision(_service().allocation_decision(implemented_tree, implemented_profile, &"district-charter", false), &"ok", true, "implemented authored node", failures)
+
+	var future_tree := _activation_tree(&"future", true)
+	var future_profile := _profile(future_tree.id, true, [&"city-heart"], 2)
+	var before := future_profile.to_dictionary()
+	_assert_decision(_service().allocation_decision(future_tree, future_profile, &"district-charter", false), &"future_node", false, "future authored node", failures)
+	_assert_decision(_service().allocation_decision(future_tree, future_profile, &"district-charter", true), &"future_node", false, "Developer reveal cannot authorize future node", failures)
+	TestAssertions.equal(future_profile.to_dictionary(), before, "future readiness checks are pure", failures)
+
+	var historical := _profile(future_tree.id, true, [&"city-heart", &"district-charter"], 1)
+	_assert_decision(_service().allocation_decision(future_tree, historical, &"district-charter", false), &"already_allocated", false, "historical future allocation remains allocated", failures)
+	_assert_decision(_service().allocation_decision(future_tree, historical, &"implemented-child", false), &"ok", true, "historical future allocation remains path-valid", failures)
+
+	var portal_tree := _activation_tree(&"portal-gated")
+	var portal_profile := _profile(portal_tree.id, true, [&"city-heart"], 1)
+	_assert_decision(_service().allocation_decision(portal_tree, portal_profile, &"district-charter", false), &"district_target_missing", false, "missing district target", failures)
+
+	var wrong_project := LatticewrightRuntimePortfolioRegistry.new()
+	TestAssertions.equal(wrong_project.register_runtime(_runtime(&"wrong-project", &"district-graph")), "", "wrong-project fixture registers", failures)
+	_assert_decision(_service(wrong_project).allocation_decision(portal_tree, portal_profile, &"district-charter", false), &"district_target_missing", false, "wrong district project", failures)
+
+	var wrong_graph := LatticewrightRuntimePortfolioRegistry.new()
+	TestAssertions.equal(wrong_graph.register_runtime(_runtime(&"district-project", &"wrong-graph")), "", "wrong-graph fixture registers", failures)
+	_assert_decision(_service(wrong_graph).allocation_decision(portal_tree, portal_profile, &"district-charter", false), &"district_target_missing", false, "wrong district graph", failures)
+
+	var exact := LatticewrightRuntimePortfolioRegistry.new()
+	TestAssertions.equal(exact.register_runtime(_runtime(&"district-project", &"district-graph")), "", "exact district fixture registers", failures)
+	var live_service := _service(exact)
+	_assert_decision(live_service.allocation_decision(portal_tree, portal_profile, &"district-charter", false), &"ok", true, "exact district target", failures)
+	exact.unregister_runtime(&"district-project")
+	_assert_decision(live_service.allocation_decision(portal_tree, portal_profile, &"district-charter", false), &"district_target_missing", false, "target unregister is observed live", failures)
 
 func _test_directed_connectivity_and_implicit_roots(failures: Array[String]) -> void:
 	var tree := _tree()
@@ -205,7 +243,7 @@ func _test_refund_rejections_and_precedence(failures: Array[String]) -> void:
 	rejected.implicit_start_nodes.append(&"mutated")
 	TestAssertions.equal(profile.to_dictionary(), profile_before, "rejected refund arrays are defensive from profile input", failures)
 
-	var city_result := PassiveTreeLoader.new().load_path("res://data/passive_trees/city/party-forge-city.pstree.json")
+	var city_result := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(city_result.ok(), "City root refund test loads the committed artifact", failures)
 	if city_result.ok():
 		var city_profile := _profile(city_result.tree.id, true, [&"city-heart"], 0)
@@ -251,8 +289,8 @@ func _assert_decision(decision: PassiveTreeActionDecision, expected_code: String
 	if not expected_allowed:
 		TestAssertions.equal(decision.point_delta, 0, "%s rejection has no point delta" % label, failures)
 
-func _service() -> PassiveTreeProgressionService:
-	return PassiveTreeProgressionService.new(PassiveEffectRegistry.new(), PassiveRequirementRegistry.new())
+func _service(portfolio: LatticewrightRuntimePortfolioRegistry = null) -> PassiveTreeProgressionService:
+	return PassiveTreeProgressionService.new(PassiveEffectRegistry.new(), PassiveRequirementRegistry.new(), PassiveTreeActivationPolicy.new(), portfolio)
 
 func _profile(tree_id: StringName, discovered: bool, allocations: Array[StringName], points: int) -> ProfileState:
 	var profile := ProfileState.new_profile("profile-12345678", "Progression Tester", 1000)
@@ -310,10 +348,44 @@ func _tree() -> PassiveTreeDefinition:
 		PassiveTreeConnection.new(&"heart-permanent-effect", &"city-heart", &"permanent-effect", &"bidirectional"),
 	]
 	var starts: Array[StringName] = [&"city-heart"]
-	return PassiveTreeDefinition.new(&"party-forge-city-v1", "Test City", starts, nodes, connections)
+	for tree_node: PassiveTreeNode in nodes:
+		tree_node.metadata["activationState"] = "implemented"
+	return PassiveTreeDefinition.new(&"test-city-tree-v1", "Test City", starts, nodes, connections)
+
+func _activation_tree(state: StringName, include_child: bool = false) -> PassiveTreeDefinition:
+	var nodes: Array[PassiveTreeNode] = [
+		PassiveTreeNode.new(&"city-heart", &"start", Vector2.ZERO, "City Heart", "", 0, [], null, [], [], {"activationState": "implemented"}),
+		PassiveTreeNode.new(&"district-charter", &"small", Vector2(100, 0), "District Charter", "", 1, [], null, [], [], {"activationState": String(state)}),
+	]
+	var connections: Array[PassiveTreeConnection] = [
+		PassiveTreeConnection.new(&"heart-charter", &"city-heart", &"district-charter", &"bidirectional"),
+	]
+	if include_child:
+		nodes.append(PassiveTreeNode.new(&"implemented-child", &"small", Vector2(200, 0), "Implemented Child", "", 1, [], null, [], [], {"activationState": "implemented"}))
+		connections.append(PassiveTreeConnection.new(&"charter-child", &"district-charter", &"implemented-child", &"bidirectional"))
+	var portals: Array[PassiveTreePortal] = []
+	if state == &"portal-gated":
+		portals.append(PassiveTreePortal.new(&"city-to-district", &"district-charter", "District", &"drill-down", &"district-project", &"district-graph", &"district-tree"))
+	return PassiveTreeDefinition.new(&"party-forge-city-v1", "Activation Test City", [&"city-heart"], nodes, connections, {}, portals)
+
+func _runtime(project_id: StringName, graph_id: StringName) -> Dictionary:
+	return {
+		"format": "latticewright-progression",
+		"formatVersion": 3,
+		"projectId": String(project_id),
+		"name": "District Runtime",
+		"archetype": "passive-tree",
+		"vocabulary": {},
+		"schemas": {},
+		"content": [],
+		"graphs": [{"id": String(graph_id)}],
+		"graphPortals": [],
+		"assets": [],
+		"extensions": {},
+	}
 
 func _requirement(node_id: StringName) -> PassiveTreeRequirement:
-	return PassiveTreeRequirement.new(&"allocated_node", &"contains", String(node_id), {"treeId": "party-forge-city-v1"})
+	return PassiveTreeRequirement.new(&"allocated_node", &"contains", String(node_id), {"treeId": "test-city-tree-v1"})
 
 func _tree_fingerprint(tree: PassiveTreeDefinition) -> Dictionary:
 	var node_values: Array[Dictionary] = []

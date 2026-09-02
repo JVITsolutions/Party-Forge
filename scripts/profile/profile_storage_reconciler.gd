@@ -28,10 +28,16 @@ func reconcile(
 	var resolution := resolver.resolve(tree, allocations)
 	if resolution == null:
 		return _error("resolver", "returned no resolution")
+	if profile.extraction_capacity < 0 or profile.extraction_capacity > ProfileCodec.JSON_SAFE_INTEGER_MAX:
+		return _error("extraction_capacity", "existing value must be in the JSON-safe range")
 	var resolved_columns := clampi(resolution.flat_value(&"inventory_columns", &"profile"), 0, 8)
 	var proposed_columns := maxi(profile.inventory_columns, resolved_columns)
 	if proposed_columns < 0 or proposed_columns > 8:
 		return _error("inventory_columns", "proposed value must be in range 0..8")
+	var resolved_extraction_capacity := resolution.flat_value(&"extraction_capacity", &"profile")
+	if resolved_extraction_capacity < 0 or resolved_extraction_capacity > ProfileCodec.JSON_SAFE_INTEGER_MAX:
+		return _error("extraction_capacity", "resolved value must be in the JSON-safe range")
+	var proposed_extraction_capacity := maxi(profile.extraction_capacity, resolved_extraction_capacity)
 
 	var resolved_tab_count := 0
 	for contract: Dictionary in resolution.stash_tab_contracts():
@@ -95,6 +101,7 @@ func reconcile(
 		return _error(field, ownership.error)
 
 	profile.inventory_columns = proposed_columns
+	profile.extraction_capacity = proposed_extraction_capacity
 	profile.stash_tabs = proposed_tabs
 	return ""
 

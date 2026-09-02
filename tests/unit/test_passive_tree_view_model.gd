@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_state_projection_and_redaction(failures)
 	_test_typed_presentation_copy_and_development_state(failures)
+	_test_authored_activation_projection_and_portal_diagnostics(failures)
 	_test_unsupported_connection_semantics_are_unavailable(failures)
 	_test_implicit_legacy_root_is_projected_active(failures)
 	_test_developer_reveal_is_view_only(failures)
@@ -46,7 +47,7 @@ func _test_state_projection_and_redaction(failures: Array[String]) -> void:
 	TestAssertions.equal(allocatable.description, "Exact Creator description; it is not parsed.", "Creator description remains display copy", failures)
 	TestAssertions.equal(allocatable.cost_text, "1", "visible cost text", failures)
 	TestAssertions.equal(allocatable.get("refund_policy_text"), "Refundable", "visible refundable policy is typed presentation data", failures)
-	TestAssertions.equal(allocatable.get("development_lines"), ["Coming Soon"], "Player projection labels future contract without Developer availability", failures)
+	TestAssertions.equal(allocatable.get("development_lines"), [], "obsolete integrationStatus metadata does not invent readiness", failures)
 	TestAssertions.equal(allocatable.effect_lines, ["Experience Gain: +2% (all_run_experience).", "Experience Gain: +3% (all_run_experience)."], "effect lines come from typed contracts in authored order", failures)
 	TestAssertions.equal(allocatable.keyword_lines, ["Experience Gain: Increases experience earned in the named scope."], "keyword explanations are deduplicated", failures)
 	TestAssertions.equal(allocatable.decision_code, &"ok", "allocatable exact decision code", failures)
@@ -101,17 +102,49 @@ func _test_state_projection_and_redaction(failures: Array[String]) -> void:
 	TestAssertions.equal(obscured.decision_message, "Reveal this passive node before allocating it.", "obscured decision reveals no mechanics", failures)
 
 func _test_typed_presentation_copy_and_development_state(failures: Array[String]) -> void:
-	var tree := _tree()
-	var profile := _profile(tree.id)
+	var tree := _activation_tree(&"future")
+	var profile := _activation_profile(tree.id)
 	var developer := _view_model().build(tree, profile, true)
-	var source := _node(developer, &"b-allocatable")
-	TestAssertions.equal(source.get("development_lines"), ["Coming Soon", "Developer Preview"], "Developer projection exposes both future-contract disclosures", failures)
+	var source := _node(developer, &"district-charter")
+	TestAssertions.equal(source.get("development_lines"), ["Coming Soon", "Developer Preview"], "Developer projection exposes authored future disclosures", failures)
 	var copied := source.copy()
 	var source_lines: Variant = source.get("development_lines")
 	if source_lines is Array:
 		source_lines.append("Caller Mutation")
 	TestAssertions.equal(copied.get("development_lines"), ["Coming Soon", "Developer Preview"], "typed development presentation is defensively copied", failures)
 	TestAssertions.equal(copied.get("refund_policy_text"), "Refundable", "typed refund presentation survives copy", failures)
+
+func _test_authored_activation_projection_and_portal_diagnostics(failures: Array[String]) -> void:
+	var future_tree := _activation_tree(&"future")
+	var future_profile := _activation_profile(future_tree.id)
+	var future := _node(_view_model().build(future_tree, future_profile, false), &"district-charter")
+	TestAssertions.equal(future.state, &"unavailable", "future node is visible but unavailable", failures)
+	TestAssertions.equal(future.decision_code, &"future_node", "future node exposes stable readiness code", failures)
+	TestAssertions.equal(future.decision_message, "Coming Soon", "future node exposes stable readiness copy", failures)
+	TestAssertions.equal(future.get("development_lines"), ["Coming Soon"], "future node exposes explicit player disclosure", failures)
+	TestAssertions.equal(future.get("activation_state"), &"future", "future authored state is explicit typed presentation data", failures)
+	TestAssertions.equal(future.get("activation_ready"), false, "future authored state is not ready", failures)
+
+	future_profile.tree_allocations[String(future_tree.id)] = ["city-heart", "district-charter"]
+	var allocated_future := _node(_view_model().build(future_tree, future_profile, false), &"district-charter")
+	TestAssertions.equal(allocated_future.state, &"allocated", "historical future allocation remains allocated", failures)
+	TestAssertions.equal(allocated_future.decision_code, &"already_allocated", "historical future allocation keeps stable allocation state", failures)
+	TestAssertions.equal(allocated_future.get("development_lines"), ["Coming Soon"], "historical future allocation retains disclosure without invented effects", failures)
+
+	var portal_tree := _activation_tree(&"portal-gated")
+	var portal_profile := _activation_profile(portal_tree.id)
+	var missing := _node(_view_model().build(portal_tree, portal_profile, false), &"district-charter")
+	TestAssertions.equal(missing.state, &"unavailable", "missing district target is unavailable", failures)
+	TestAssertions.equal(missing.decision_code, &"district_target_missing", "missing district target exposes stable readiness code", failures)
+	TestAssertions.equal(missing.get("development_lines"), ["District tree not installed"], "missing district target exposes explicit diagnostic", failures)
+
+	var exact := LatticewrightRuntimePortfolioRegistry.new()
+	TestAssertions.equal(exact.register_runtime(_runtime(&"district-project", &"district-graph")), "", "exact view-model portal fixture registers", failures)
+	var available := _node(_view_model(exact).build(portal_tree, portal_profile, false), &"district-charter")
+	TestAssertions.equal(available.state, &"allocatable", "exact installed district target becomes ordinarily allocatable", failures)
+	TestAssertions.equal(available.decision_code, &"ok", "exact installed district target uses ordinary success decision", failures)
+	TestAssertions.equal(available.get("development_lines"), [], "installed district target has no missing-target disclosure", failures)
+	TestAssertions.equal(available.get("activation_ready"), true, "exact installed district target is readiness-authorized", failures)
 
 func _test_unsupported_connection_semantics_are_unavailable(failures: Array[String]) -> void:
 	var tree := _tree()
@@ -154,15 +187,15 @@ func _test_developer_reveal_is_view_only(failures: Array[String]) -> void:
 	TestAssertions.equal(_node(view_model.build(tree, profile, false), &"z-obscured").display_name, "???", "Developer reveal cannot affect later player builds", failures)
 
 func _test_committed_city_projection_is_lexical(failures: Array[String]) -> void:
-	var load_result := PassiveTreeLoader.new().load_path("res://data/passive_trees/city/party-forge-city.pstree.json")
+	var load_result := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(load_result.ok(), "committed City tree loads for view projection", failures)
 	if not load_result.ok():
 		return
 	var profile := _profile(load_result.tree.id)
 	var result := _view_model().build(load_result.tree, profile, true)
 	TestAssertions.equal(result["tree_id"], &"party-forge-city-v1", "committed City stable tree ID", failures)
-	TestAssertions.equal((result["nodes"] as Array).size(), 31, "committed City projects every node", failures)
-	TestAssertions.equal((result["connections"] as Array).size(), 31, "committed City projects every connection", failures)
+	TestAssertions.equal((result["nodes"] as Array).size(), 37, "committed City projects every node", failures)
+	TestAssertions.equal((result["connections"] as Array).size(), 37, "committed City projects every connection", failures)
 	var node_ids: Array[String] = []
 	for view: PassiveTreeNodeViewData in result["nodes"]:
 		node_ids.append(String(view.id))
@@ -274,10 +307,10 @@ func _test_null_inputs_fail_closed(failures: Array[String]) -> void:
 	TestAssertions.equal(missing_service["nodes"], [], "null dependency fails closed", failures)
 	TestAssertions.truthy(not String(missing_service["status"]).is_empty(), "null dependency has a safe status", failures)
 
-func _view_model() -> PassiveTreeViewModel:
+func _view_model(portfolio: LatticewrightRuntimePortfolioRegistry = null) -> PassiveTreeViewModel:
 	var effects := PassiveEffectRegistry.new()
 	var requirements := PassiveRequirementRegistry.new()
-	return PassiveTreeViewModel.new(PassiveTreeProgressionService.new(effects, requirements), PassiveEffectResolver.new(effects), effects, requirements)
+	return PassiveTreeViewModel.new(PassiveTreeProgressionService.new(effects, requirements, PassiveTreeActivationPolicy.new(), portfolio), PassiveEffectResolver.new(effects), effects, requirements)
 
 func _profile(tree_id: StringName) -> ProfileState:
 	var profile := ProfileState.new_profile("profile-12345678", "View Tester", 1000)
@@ -341,6 +374,41 @@ func _tree() -> PassiveTreeDefinition:
 	]
 	var starts: Array[StringName] = [&"a-start"]
 	return PassiveTreeDefinition.new(&"party-forge-view-test-v1", "View Test", starts, nodes, connections, {"nested": {"value": 1}})
+
+func _activation_tree(state: StringName) -> PassiveTreeDefinition:
+	var nodes: Array[PassiveTreeNode] = [
+		PassiveTreeNode.new(&"city-heart", &"start", Vector2.ZERO, "City Heart", "", 0, [], null, [], [], {"activationState": "implemented"}),
+		PassiveTreeNode.new(&"district-charter", &"small", Vector2(100, 0), "District Charter", "", 1, [], null, [], [], {"activationState": String(state)}),
+	]
+	var connections: Array[PassiveTreeConnection] = [PassiveTreeConnection.new(&"heart-charter", &"city-heart", &"district-charter", &"bidirectional")]
+	var portals: Array[PassiveTreePortal] = []
+	if state == &"portal-gated":
+		portals.append(PassiveTreePortal.new(&"city-to-district", &"district-charter", "District", &"drill-down", &"district-project", &"district-graph", &"district-tree"))
+	return PassiveTreeDefinition.new(&"party-forge-city-v1", "Activation Test City", [&"city-heart"], nodes, connections, {}, portals)
+
+func _activation_profile(tree_id: StringName) -> ProfileState:
+	var profile := ProfileState.new_profile("profile-12345678", "Activation View Tester", 1000)
+	profile.discovered_trees.append(String(tree_id))
+	profile.tree_allocations[String(tree_id)] = ["city-heart"]
+	profile.passive_points_available = 1
+	profile.passive_points_lifetime_earned = 1
+	return profile
+
+func _runtime(project_id: StringName, graph_id: StringName) -> Dictionary:
+	return {
+		"format": "latticewright-progression",
+		"formatVersion": 3,
+		"projectId": String(project_id),
+		"name": "District Runtime",
+		"archetype": "passive-tree",
+		"vocabulary": {},
+		"schemas": {},
+		"content": [],
+		"graphs": [{"id": String(graph_id)}],
+		"graphPortals": [],
+		"assets": [],
+		"extensions": {},
+	}
 
 func _node(result: Dictionary, node_id: StringName) -> PassiveTreeNodeViewData:
 	for view: PassiveTreeNodeViewData in result["nodes"]:

@@ -5,7 +5,7 @@ const SIGNED_64_MAX := 9223372036854775807
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_city_numeric_aggregation_is_deterministic(failures)
-	_test_stash_future_contract_projection_is_defensive(failures)
+	_test_exact_live_city_effect_projection_is_defensive(failures)
 	_test_exact_unlock_ids_and_future_states(failures)
 	_test_unknown_and_invalid_inputs_fail_closed(failures)
 	_test_integer_overflow_fails_closed(failures)
@@ -13,9 +13,11 @@ func run() -> Array[String]:
 	return failures
 
 func _test_city_numeric_aggregation_is_deterministic(failures: Array[String]) -> void:
-	var tree := _city_tree(failures)
-	if tree == null:
-		return
+	var tree := _tree_with_nodes([
+		_node(&"shared-lessons-1", [PassiveTreeEffect.new(&"experience_gain", &"add_percent", 2, {"scope": "all_run_experience"})]),
+		_node(&"shared-lessons-2", [PassiveTreeEffect.new(&"experience_gain", &"add_percent", 2, {"scope": "all_run_experience"})]),
+		_node(&"expanded-barracks", [PassiveTreeEffect.new(&"party_capacity", &"add_flat", 1, {"scope": "profile"})]),
+	])
 	var allocations: Array[StringName] = [
 		&"expanded-barracks", &"shared-lessons-2", &"shared-lessons-1", &"shared-lessons-2",
 	]
@@ -40,7 +42,7 @@ func _test_city_numeric_aggregation_is_deterministic(failures: Array[String]) ->
 	(returned_percent_values[&"experience_gain"] as Dictionary)[&"all_run_experience"] = 99
 	TestAssertions.equal(resolution.percent_value(&"experience_gain", &"all_run_experience"), 4, "caller mutations cannot alter stored percent values", failures)
 
-func _test_stash_future_contract_projection_is_defensive(failures: Array[String]) -> void:
+func _test_exact_live_city_effect_projection_is_defensive(failures: Array[String]) -> void:
 	var tree := _city_tree(failures)
 	if tree == null:
 		return
@@ -48,12 +50,18 @@ func _test_stash_future_contract_projection_is_defensive(failures: Array[String]
 	for effect: PassiveTreeEffect in tree.node(&"stash-access").effects:
 		stash_effect_ids.append(effect.effect_id)
 	var profile := ProfileState.new()
-	var resolution := PassiveEffectResolver.new(PassiveEffectRegistry.new()).resolve(tree, [&"stash-access"])
+	var resolver := PassiveEffectResolver.new(PassiveEffectRegistry.new())
+	var resolution := resolver.resolve(tree, [
+		&"equipment-registry", &"field-pack", &"stash-access", &"extraction-license",
+		&"secured-loadout", &"leader-loadout-extraction",
+	])
 
-	TestAssertions.equal(resolution.permanent_unlock_ids(), [&"stash"], "Stash Access grants the exact permanent unlock", failures)
+	TestAssertions.equal(resolution.permanent_unlock_ids(), [&"bring_in_gear", &"equipment_inventory", &"inventory", &"item_extraction", &"leader_loadout_extraction", &"stash"], "six paid City nodes grant the exact permanent unlock set", failures)
 	TestAssertions.equal(resolution.building_discoveries(), [&"warehouse"], "Stash Access discovers the warehouse", failures)
-	TestAssertions.equal(resolution.tree_discoveries(), [&"party-forge-warehouse-v1"], "Stash Access discovers the warehouse tree", failures)
-	TestAssertions.equal(resolution.set_values(&"feature_unlock"), [&"stash"], "feature unlock set is typed by canonical unlock ID", failures)
+	TestAssertions.equal(resolution.tree_discoveries(), [], "implemented City nodes do not discover the Warehouse passive tree", failures)
+	TestAssertions.equal(resolution.set_values(&"feature_unlock"), [&"bring_in_gear", &"equipment_inventory", &"inventory", &"item_extraction", &"leader_loadout_extraction", &"stash"], "feature unlock set is typed by canonical unlock ID", failures)
+	TestAssertions.equal(resolution.flat_value(&"inventory_columns", &"profile"), 1, "Field Pack projects one profile inventory column", failures)
+	TestAssertions.equal(resolution.flat_value(&"extraction_capacity", &"profile"), 1, "Extraction License projects one profile extraction slot", failures)
 	TestAssertions.equal(
 		resolution.stash_tab_contracts(),
 		[{"count": 1, "scope": &"profile", "slotsPerTab": 100}],
@@ -62,6 +70,8 @@ func _test_stash_future_contract_projection_is_defensive(failures: Array[String]
 	)
 	TestAssertions.equal(profile.stash_tabs, [], "resolution does not create profile stash storage", failures)
 	TestAssertions.equal(stash_effect_ids, _effect_ids(tree.node(&"stash-access")), "effect sorting does not mutate the City node", failures)
+	var stash_only := resolver.resolve(tree, [&"stash-access"])
+	TestAssertions.equal(stash_only.tree_discoveries(), [], "Stash Access alone never projects Warehouse tree discovery", failures)
 
 	var unlocks := resolution.permanent_unlock_ids()
 	unlocks.append(&"caller-injected")
@@ -69,14 +79,17 @@ func _test_stash_future_contract_projection_is_defensive(failures: Array[String]
 	buildings.clear()
 	var contracts := resolution.stash_tab_contracts()
 	contracts[0]["count"] = 99
-	TestAssertions.equal(resolution.permanent_unlock_ids(), [&"stash"], "permanent unlock accessor is defensive", failures)
+	TestAssertions.equal(resolution.permanent_unlock_ids(), [&"bring_in_gear", &"equipment_inventory", &"inventory", &"item_extraction", &"leader_loadout_extraction", &"stash"], "permanent unlock accessor is defensive", failures)
 	TestAssertions.equal(resolution.building_discoveries(), [&"warehouse"], "building discovery accessor is defensive", failures)
 	TestAssertions.equal(resolution.stash_tab_contracts()[0]["count"], 1, "stash contract accessor is deeply defensive", failures)
 
 func _test_exact_unlock_ids_and_future_states(failures: Array[String]) -> void:
-	var tree := _city_tree(failures)
-	if tree == null:
-		return
+	var tree := _tree_with_nodes([
+		_node(&"north-road-charter", [PassiveTreeEffect.new(&"region_unlock", &"set", true, {"regionId": "north-road"})]),
+		_node(&"artificers-hall", [PassiveTreeEffect.new(&"city_service_unlock", &"set", true, {"serviceId": "crafting"})]),
+		_node(&"equipment-registry", [PassiveTreeEffect.new(&"feature_unlock", &"set", true, {"featureId": "equipment_inventory"})]),
+		_node(&"arena-charter", [PassiveTreeEffect.new(&"mode_unlock", &"set", true, {"modeId": "battle"})]),
+	])
 	var resolution := PassiveEffectResolver.new(PassiveEffectRegistry.new()).resolve(tree, [
 		&"north-road-charter", &"artificers-hall", &"equipment-registry", &"arena-charter",
 	])

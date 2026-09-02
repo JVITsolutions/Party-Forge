@@ -123,7 +123,7 @@ func test_run_setup_lobby_is_the_single_typed_main_seam() -> Array[String]:
 
 const CITY_TREE_ID := "party-forge-city-v1"
 const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
-const CITY_LOCKED_STATUS := "Complete the prologue to unlock the City passive tree."
+const CITY_LOCKED_STATUS := "Win a run to reveal the City passive tree."
 const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer City Preview."
 const QUEUED_LEVELS_DETERMINISTIC_SEED := 14
 
@@ -532,7 +532,7 @@ func _test_warehouse_presentation_activation_wiring(failures: Array[String]) -> 
 
     main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_WAREHOUSE)
     TestAssertions.truthy(locked_dialog.is_open() and not warehouse.is_open(), "blocked route opens guidance only", failures)
-    TestAssertions.equal((locked_dialog.get_node("Overlay/Frame/Layout/Body") as Label).text, WAREHOUSE_LOCKED_DIALOG.PROLOGUE_BODY, "undiscovered City route selects prologue guidance", failures)
+    TestAssertions.equal((locked_dialog.get_node("Overlay/Frame/Layout/Body") as Label).text, "Win a run to reveal the City tree. Then unlock Stash Access to open the Warehouse.", "undiscovered City route selects first-victory guidance", failures)
     locked_dialog.close()
 
     var warehouse_origin := menu.get_node("Warehouse") as Control
@@ -545,8 +545,8 @@ func _test_warehouse_presentation_activation_wiring(failures: Array[String]) -> 
     locked_dialog.close()
 
     var profile_id := manager.active_profile().profile_id
-    var completed := ProfileMutationService.new(ProfileStore.new()).complete_prologue(profile_id, "warehouse-guidance-city", root)
-    TestAssertions.truthy(completed.ok(), "Warehouse guidance fixture durably completes the prologue", failures)
+    var completed := ProfileTestSupport.commit_city_victory(profile_id, "warehouse-guidance-city", root)
+    TestAssertions.truthy(completed.ok(), "Warehouse guidance fixture durably commits its first victory", failures)
     TestAssertions.equal(manager.refresh_profile(profile_id), "", "Warehouse guidance fixture refreshes durable City access", failures)
     main.call("_refresh_main_menu_projection")
     menu.call("_emit_route", MainMenuViewModel.ROUTE_WAREHOUSE, menu.get_node("Warehouse") as Control)
@@ -900,6 +900,28 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
         TestAssertions.equal(player_registry.all_records().size(), 0, "feature-unlocked zero-column Player Mode context fails closed with no uncollectable drop", failures)
     _cleanup_main(player_main)
 
+    var inventory_locked_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(inventory_locked_main)
+    var inventory_locked_profile := inventory_locked_main.active_profile() as ProfileState
+    inventory_locked_profile.permanent_feature_unlocks = ["equipment_inventory"]
+    inventory_locked_profile.inventory_columns = 1
+    TestAssertions.equal(ProfileStore.new().save_profile(inventory_locked_profile, String(inventory_locked_main.get("profile_root"))), "", "positive-capacity fixture persists equipment access without inventory access", failures)
+    TestAssertions.equal(inventory_locked_main.profile_manager.refresh_profile(inventory_locked_profile.profile_id), "", "positive-capacity fixture refreshes the authoritative profile", failures)
+    TestAssertions.truthy(inventory_locked_main.select_leader_class(&"fighter"), "positive-capacity inventory-locked fixture starts through Main", failures)
+    var inventory_locked_roll := inventory_locked_main.personal_loot_roll_service as PersonalLootRollService
+    var inventory_locked_registry := inventory_locked_main.ground_item_registry as GroundItemRegistry
+    if inventory_locked_roll != null and inventory_locked_registry != null:
+        inventory_locked_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
+        (inventory_locked_main.get_node("SpawnDirector") as SpawnDirector).call("_on_enemy_defeated", load("res://data/enemies/swarmer.tres") as EnemyDefinition, inventory_locked_main.leader.position, 1)
+        TestAssertions.equal(inventory_locked_main.active_run_context.run_inventory().capacity, 5, "inventory-locked Player Mode run has positive owner capacity", failures)
+        TestAssertions.equal(inventory_locked_registry.all_records().size(), 0, "missing inventory unlock blocks Player Mode drops before generation despite positive capacity", failures)
+    var restored_profile := ProfileStore.new().load_profile(inventory_locked_profile.profile_id, String(inventory_locked_main.get("profile_root")))
+    TestAssertions.truthy(restored_profile.ok(), "positive-capacity fixture reloads for isolation reset", failures)
+    if restored_profile.ok():
+        restored_profile.profile.inventory_columns = 0
+        TestAssertions.equal(ProfileStore.new().save_profile(restored_profile.profile, String(inventory_locked_main.get("profile_root"))), "", "positive-capacity fixture restores the shared test profile column count", failures)
+    _cleanup_main(inventory_locked_main)
+
     var developer_settings := PartyForgeSettings.new()
     developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
     developer_settings.unlock_all_implemented_content = true
@@ -1056,7 +1078,7 @@ func _test_gameplay_input_blocked_predicate(failures: Array[String]) -> void:
     TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual settings screen blocks gameplay input", failures)
     settings.close()
     var warehouse_dialog: Variant = main.get_node("WarehouseLockedDialog")
-    warehouse_dialog.call("open", WAREHOUSE_LOCKED_DIALOG.Guidance.PROLOGUE_REQUIRED, null)
+    warehouse_dialog.call("open", WAREHOUSE_LOCKED_DIALOG.Guidance.FIRST_VICTORY_REQUIRED, null)
     TestAssertions.truthy(bool(main.call(&"_gameplay_input_blocked")), "actual Warehouse guidance blocks gameplay input", failures)
     warehouse_dialog.close()
     TestAssertions.truthy(not bool(main.call(&"_gameplay_input_blocked")), "closing Warehouse guidance restores world interaction", failures)
@@ -1346,6 +1368,14 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     TestAssertions.truthy(has_definition, "main exposes one loaded passive tree definition", failures)
     if has_definition:
         TestAssertions.truthy(main.get("passive_tree_definition") != null, "main loads the validated City tree once at bootstrap", failures)
+    var has_portfolio := _has_property(main, &"passive_tree_portfolio")
+    TestAssertions.truthy(has_portfolio, "main exposes one shared runtime-v3 portfolio registry", failures)
+    var portfolio := main.get("passive_tree_portfolio") as LatticewrightRuntimePortfolioRegistry if has_portfolio else null
+    TestAssertions.truthy(portfolio != null and portfolio.has_graph(&"party-forge-city", &"city-passive-tree"), "shared portfolio registers the exact City runtime graph", failures)
+    var mutation_progression := main.passive_tree_mutations.get("_progression") as PassiveTreeProgressionService
+    var view_progression := main.passive_tree_view_model.get("_progression") as PassiveTreeProgressionService
+    TestAssertions.truthy(mutation_progression == view_progression, "mutation and view services share one progression authority", failures)
+    TestAssertions.truthy(mutation_progression != null and mutation_progression.get("_portfolio") == portfolio, "shared progression authority uses the composed runtime-v3 portfolio", failures)
     TestAssertions.equal(_method_arg_count(main, &"_open_city_passive_tree"), 3, "main exposes one City route with context, origin, and return control", failures)
     TestAssertions.truthy(settings.has_method(&"open_additional"), "Settings exposes Additional-tab resume routing", failures)
     TestAssertions.truthy(settings.has_method(&"show_route_status"), "Settings exposes a player-facing child-route status contract", failures)
@@ -1374,11 +1404,10 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     settings.configure(main.settings_store, player_unlock_all, main.profile_manager)
 
     var profile_id := created.profile.profile_id if created.ok() else ""
-    var profile_mutations := ProfileMutationService.new(ProfileStore.new())
-    var completed := profile_mutations.complete_prologue(profile_id, "main-wiring-city-complete", root)
-    TestAssertions.truthy(completed.ok(), "normal City route fixture completes the prologue durably", failures)
+    var completed := ProfileTestSupport.commit_city_victory(profile_id, "main-wiring-city-victory", root)
+    TestAssertions.truthy(completed.ok(), "normal City route fixture commits its first victory durably", failures)
     TestAssertions.equal(main.profile_manager.refresh_profile(profile_id), "", "normal City route fixture refreshes discovered City state", failures)
-    TestAssertions.truthy(main.active_profile().prologue_state == ProfileState.PrologueState.COMPLETED and CITY_TREE_ID in main.active_profile().discovered_trees, "normal City authorization uses completed durable profile state", failures)
+    TestAssertions.truthy(main.active_profile().prologue_state == ProfileState.PrologueState.NOT_STARTED and CITY_TREE_ID in main.active_profile().discovered_trees, "normal City authorization uses discovery without rewriting prologue state", failures)
     main.call("_on_main_menu_route_requested", MainMenuViewModel.ROUTE_CITY_TREE)
     TestAssertions.truthy(tree_screen.is_open() and not menu.is_open(), "authorized menu City route closes the menu and opens the tree", failures)
     TestAssertions.equal(tree_screen.get("_developer_context"), false, "menu City route configures production progression context", failures)
@@ -1392,6 +1421,11 @@ func _test_passive_tree_route_composition(failures: Array[String]) -> void:
     main.call("_refresh_main_menu_projection")
     TestAssertions.truthy(menu.projection().city_tree_visible and not menu.projection().city_tree_enabled, "wrong City tree ID cannot advertise an enabled returning-menu route", failures)
     main.passive_tree_definition.id = original_tree_id
+    var original_portfolio := main.passive_tree_portfolio
+    main.passive_tree_portfolio = null
+    main.call("_refresh_main_menu_projection")
+    TestAssertions.truthy(menu.projection().city_tree_visible and not menu.projection().city_tree_enabled, "missing runtime-v3 portfolio cannot advertise an enabled returning-menu route", failures)
+    main.passive_tree_portfolio = original_portfolio
     var original_mutation_service := main.passive_tree_mutations
     main.passive_tree_mutations = null
     main.call("_refresh_main_menu_projection")

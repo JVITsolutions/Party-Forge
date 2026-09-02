@@ -61,7 +61,7 @@ func _run() -> void:
 	root.add_child(main)
 	await _frames(4)
 
-	# Fixture setup only: complete the prologue so the existing City tree and the
+	# Fixture setup only: commit first-victory City discovery so the City tree and
 	# no-stash Warehouse guidance are both available for production composition.
 	var created := main.profile_manager.create_profile("Warehouse Activation", 1000)
 	_assert(created.ok(), "fixture setup: responsive profile is created")
@@ -69,8 +69,8 @@ func _run() -> void:
 		await _finish(main)
 		return
 	var profile_id := created.profile.profile_id
-	var completion := ProfileMutationService.new(ProfileStore.new()).complete_prologue(profile_id, "warehouse-responsive-complete", _profile_root)
-	_assert(completion.ok(), "fixture setup: responsive profile completes prologue")
+	var completion := ProfileTestSupport.commit_city_victory(profile_id, "warehouse-responsive-first-victory", _profile_root)
+	_assert(completion.ok(), "fixture setup: responsive profile commits first-victory City discovery")
 	if not completion.ok():
 		await _finish(main)
 		return
@@ -125,7 +125,7 @@ func _run() -> void:
 			_assert(not label.text.strip_edges().is_empty(), "%s text remains readable at %dx%d" % [label.name, window_size.x, window_size.y])
 			_assert_readable(label, 18, effective_scale.y, window_size)
 		_assert(active_profile.text == "Active Profile: Warehouse Activation", "active-profile text is exact at %dx%d" % [window_size.x, window_size.y])
-		_assert(status.text == "Ready for your next run.", "status text is exact at %dx%d" % [window_size.x, window_size.y])
+		_assert(status.text == "Begin your journey.", "status text is exact at %dx%d" % [window_size.x, window_size.y])
 		for action: Button in actions:
 			_assert(action.visible and not action.disabled, "%s remains available at %dx%d" % [action.name, window_size.x, window_size.y])
 			_assert_contained(logical_rect, action, action.name, window_size)

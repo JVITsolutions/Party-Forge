@@ -9,7 +9,7 @@ func run() -> Array[String]:
 	_test_every_prologue_state_selects_its_route(failures)
 	_test_recovery_overrides_every_profile_progress_route(failures)
 	_test_recovery_status_precedes_unavailable_city_status(failures)
-	_test_completed_discovery_exposes_city_tree(failures)
+	_test_discovery_exposes_city_tree_in_every_prologue_state(failures)
 	_test_player_mode_ignores_developer_overrides(failures)
 	_test_developer_mode_exposes_nonpersistent_tools(failures)
 	_test_unavailable_city_tree_fails_closed(failures)
@@ -86,18 +86,23 @@ func _test_recovery_status_precedes_unavailable_city_status(failures: Array[Stri
 	TestAssertions.equal(projection.primary_route_id, MainMenuViewModel.ROUTE_RUN_RECOVERY, "recovery remains the primary route while City is unavailable", failures)
 	TestAssertions.equal(projection.status_text, "An interrupted run is ready to recover.", "recovery status takes precedence over unavailable City status", failures)
 
-func _test_completed_discovery_exposes_city_tree(failures: Array[String]) -> void:
-	var profile := _profile(ProfileState.PrologueState.COMPLETED)
-	profile.discovered_trees.append(CITY_TREE_ID)
-	var projection := MainMenuViewModel.build(profile, PartyForgeSettings.new(), true)
-	TestAssertions.equal(projection.city_tree_label, "City Passive Tree", "durably discovered City tree has a player label", failures)
-	TestAssertions.equal(projection.city_tree_route_id, &"city_tree", "durably discovered City tree uses its stable route", failures)
-	TestAssertions.truthy(projection.city_tree_visible and projection.city_tree_enabled, "completed discovery exposes available City tree", failures)
-	TestAssertions.truthy(not projection.developer_quick_start_visible, "Player Mode never exposes Developer Quick Start", failures)
+func _test_discovery_exposes_city_tree_in_every_prologue_state(failures: Array[String]) -> void:
+	for prologue_state: ProfileState.PrologueState in [
+		ProfileState.PrologueState.NOT_STARTED,
+		ProfileState.PrologueState.IN_PROGRESS,
+		ProfileState.PrologueState.COMPLETED,
+	]:
+		var profile := _profile(prologue_state)
+		profile.discovered_trees.append(CITY_TREE_ID)
+		var projection := MainMenuViewModel.build(profile, PartyForgeSettings.new(), true)
+		TestAssertions.equal(projection.city_tree_label, "City Passive Tree", "durably discovered City tree has a player label in state %d" % prologue_state, failures)
+		TestAssertions.equal(projection.city_tree_route_id, &"city_tree", "durably discovered City tree uses its stable route in state %d" % prologue_state, failures)
+		TestAssertions.truthy(projection.city_tree_visible and projection.city_tree_enabled, "discovery exposes available City tree regardless of prologue state %d" % prologue_state, failures)
+		TestAssertions.truthy(not projection.developer_quick_start_visible, "Player Mode never exposes Developer Quick Start in state %d" % prologue_state, failures)
 
-	profile.prologue_state = ProfileState.PrologueState.IN_PROGRESS
-	var incomplete := MainMenuViewModel.build(profile, PartyForgeSettings.new(), true)
-	TestAssertions.truthy(not incomplete.city_tree_visible, "durable discovery alone cannot expose City tree before completion", failures)
+	var undiscovered := _profile(ProfileState.PrologueState.COMPLETED)
+	var hidden := MainMenuViewModel.build(undiscovered, PartyForgeSettings.new(), true)
+	TestAssertions.truthy(not hidden.city_tree_visible, "prologue completion alone cannot expose City", failures)
 
 func _test_player_mode_ignores_developer_overrides(failures: Array[String]) -> void:
 	var profile := _profile(ProfileState.PrologueState.COMPLETED)

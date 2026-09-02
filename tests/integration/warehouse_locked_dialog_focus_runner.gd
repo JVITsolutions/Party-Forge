@@ -3,7 +3,7 @@ extends SceneTree
 const DIALOG_SCENE := preload("res://scenes/ui/warehouse/warehouse_locked_dialog.tscn")
 const MAX_WAIT_FRAMES := 30
 const CITY_TREE_AVAILABLE := 0
-const PROLOGUE_REQUIRED := 1
+const FIRST_VICTORY_REQUIRED := 1
 
 var _failures: Array[String] = []
 
@@ -30,10 +30,10 @@ func _run() -> void:
 	if _failures.is_empty():
 		dialog.call("open", CITY_TREE_AVAILABLE, return_focus)
 		await _expect_focus(viewport, _city_tree(dialog), "CITY_TREE_AVAILABLE focuses View City Tree")
-		dialog.call("open", PROLOGUE_REQUIRED, return_focus)
-		await _expect_focus(viewport, _back(dialog), "PROLOGUE_REQUIRED focuses Back")
+		dialog.call("open", FIRST_VICTORY_REQUIRED, return_focus)
+		await _expect_focus(viewport, _back(dialog), "FIRST_VICTORY_REQUIRED focuses Back")
 
-		dialog.call("open", PROLOGUE_REQUIRED, return_focus)
+		dialog.call("open", FIRST_VICTORY_REQUIRED, return_focus)
 		await _expect_focus(viewport, _back(dialog), "Escape fixture starts with Back focus")
 		await _send_cancel(viewport)
 		_assert(not bool(dialog.call("is_open")), "ui_cancel closes Warehouse guidance")
@@ -41,7 +41,7 @@ func _run() -> void:
 
 		var city_tree_requests: Array[Control] = []
 		dialog.connect("city_tree_requested", func(origin: Control) -> void: city_tree_requests.append(origin))
-		dialog.call("open", PROLOGUE_REQUIRED, return_focus)
+		dialog.call("open", FIRST_VICTORY_REQUIRED, return_focus)
 		await _expect_focus(viewport, _back(dialog), "Back fixture starts with Back focus")
 		_back(dialog).pressed.emit()
 		_assert(not bool(dialog.call("is_open")), "Back closes Warehouse guidance")

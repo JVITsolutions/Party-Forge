@@ -13,6 +13,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	ProfileTestSupport.remove_tree(SANDBOX_ROOT)
+	_assert(DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(PROFILE_ROOT)) == OK, "isolated profile root exists before Loot Lab manifest capture")
 	_manifest_helper = (load("res://tests/support/task10_filesystem_manifest.gd") as Script).new()
 	var profile_before := _manifest_helper.call(&"capture", PROFILE_ROOT) as Dictionary
 	_assert(String(profile_before.get("error", "")).is_empty(), "profile manifest captures before Loot Lab exercise")

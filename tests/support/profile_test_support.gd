@@ -1,6 +1,22 @@
 class_name ProfileTestSupport
 extends RefCounted
 
+static func commit_city_victory(
+	profile_id: String,
+	transaction_id: String,
+	root: String = ProfileStore.DEFAULT_ROOT,
+) -> ProfileMutationResult:
+	return ProfileMutationService.new(ProfileStore.new()).apply(
+		profile_id,
+		transaction_id,
+		func(profile: ProfileState) -> String:
+			return CityVictoryRewardPolicy.apply(profile, RunTerminalSnapshot.Outcome.VICTORY),
+		root,
+		-1,
+		"test_commit_city_victory",
+		{"outcome": "victory"},
+	)
+
 static func remove_tree(user_path: String) -> void:
 	var absolute := ProjectSettings.globalize_path(user_path)
 	if DirAccess.dir_exists_absolute(absolute):

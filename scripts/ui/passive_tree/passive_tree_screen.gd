@@ -77,6 +77,7 @@ func open(return_focus: Control = null) -> void:
 		apply_viewport_size(viewport.get_visible_rect().size)
 	_rebuild(_canvas().selected_node_id())
 	visible = true
+	call_deferred(&"_fit_canvas_to_content")
 	_pause_lease.acquire(Engine.get_main_loop() as SceneTree)
 	var selected := _canvas().node_control(_canvas().selected_node_id())
 	if selected != null and selected.is_inside_tree() and selected.is_visible_in_tree():
@@ -217,6 +218,7 @@ func _rebuild(preferred_id: StringName = &"") -> void:
 		if view != null:
 			_views[view.id] = view.copy()
 	_canvas().rebuild(projected_nodes, projection.get("connections", []) as Array)
+	_canvas().fit_to_content()
 	var selection := preferred_id if _views.has(preferred_id) else _default_selection()
 	if not selection.is_empty():
 		_canvas().select_node(selection)
@@ -348,7 +350,7 @@ func _confirm_action() -> void:
 	var transaction_id := "passive-tree-screen-%s-%s-%d-%d" % [profile.profile_id, action, Time.get_ticks_usec(), _transaction_serial]
 	var result: ProfileMutationResult
 	if action == "allocate":
-		result = _mutations.allocate(profile.profile_id, transaction_id, _tree_definition, node_id, _developer_context, _profile_root)
+		result = _mutations.allocate(profile.profile_id, transaction_id, _tree_definition, node_id, false, _profile_root)
 	else:
 		var has_respec_service := RESPEC_SERVICE_ID in profile.permanent_feature_unlocks
 		result = _mutations.refund(profile.profile_id, transaction_id, _tree_definition, node_id, _developer_context, has_respec_service, _profile_root)
@@ -402,6 +404,11 @@ func _live_viewport() -> Viewport:
 func _on_viewport_size_changed() -> void:
 	if _observed_viewport != null:
 		apply_viewport_size(_observed_viewport.get_visible_rect().size)
+		call_deferred(&"_fit_canvas_to_content")
+
+
+func _fit_canvas_to_content() -> void:
+	_canvas().fit_to_content()
 
 
 func _canvas() -> PassiveTreeCanvas:

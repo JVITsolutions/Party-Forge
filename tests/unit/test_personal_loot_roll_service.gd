@@ -2,6 +2,7 @@ extends RefCounted
 
 const DECISION_PATH := "res://scripts/loot/personal_loot_decision.gd"
 const SERVICE_PATH := "res://scripts/loot/personal_loot_roll_service.gd"
+const ACCESS_POLICY_PATH := "res://scripts/loot/player_item_drop_access_policy.gd"
 const REWARD_TUNING_PATH := "res://data/progression/reward_distribution.tres"
 const LOOT_TUNING_PATH := "res://data/items/personal_loot_tuning.tres"
 
@@ -17,6 +18,23 @@ class ContextAccessProvider extends RefCounted:
 		calls.append(context.profile_id)
 		return unlocked_profiles.has(context.profile_id)
 
+class PolicyAccessProvider extends RefCounted:
+	var policy_script: Script
+	var calls: Array[String] = []
+
+	func _init(script: Script) -> void:
+		policy_script = script
+
+	func resolve(context: PlayerRunContext) -> bool:
+		calls.append(context.profile_id)
+		var profile := context.profile_snapshot
+		var known: Array[StringName] = [&"equipment_inventory", &"inventory"]
+		var unlocked: Array[StringName] = []
+		for value: String in profile.permanent_feature_unlocks:
+			unlocked.append(StringName(value))
+		var feature_policy := FeatureAccessPolicy.new(false, false, known, known, unlocked)
+		return bool(policy_script.call(&"allows", profile, context.run_inventory(), feature_policy))
+
 class SyntheticRegistry extends RunContextRegistry:
 	var contexts: Array[PlayerRunContext] = []
 
@@ -25,6 +43,7 @@ class SyntheticRegistry extends RunContextRegistry:
 
 var _decision_script: Script
 var _service_script: Script
+var _access_policy_script: Script
 var _parties: Array[PartyManager] = []
 var _actors: Array[Node3D] = []
 
@@ -36,6 +55,8 @@ func run() -> Array[String]:
 	_test_configuration_contract(failures)
 	_test_tuning_validation_fails_closed(failures)
 	_test_unknown_difficulty_fails_closed(failures)
+	_test_player_item_drop_access_policy_matrix(failures)
+	_test_feature_gate_precedes_random_derivation(failures)
 	_test_per_context_eligibility_and_canonical_decisions(failures)
 	_test_multiplier_clamping_and_force_success(failures)
 	_test_replay_is_defensive_and_does_not_reroll(failures)
@@ -46,12 +67,99 @@ func run() -> Array[String]:
 func _load_contract_scripts(failures: Array[String]) -> void:
 	TestAssertions.truthy(ResourceLoader.exists(DECISION_PATH), "personal loot decision script exists", failures)
 	TestAssertions.truthy(ResourceLoader.exists(SERVICE_PATH), "personal loot roll service script exists", failures)
+	TestAssertions.truthy(ResourceLoader.exists(ACCESS_POLICY_PATH), "Player item-drop access policy script exists", failures)
 	if ResourceLoader.exists(DECISION_PATH):
 		_decision_script = load(DECISION_PATH) as Script
 	if ResourceLoader.exists(SERVICE_PATH):
 		_service_script = load(SERVICE_PATH) as Script
+	if ResourceLoader.exists(ACCESS_POLICY_PATH):
+		_access_policy_script = load(ACCESS_POLICY_PATH) as Script
 	TestAssertions.truthy(_decision_script != null, "personal loot decision script loads", failures)
 	TestAssertions.truthy(_service_script != null, "personal loot roll service script loads", failures)
+	TestAssertions.truthy(_access_policy_script != null, "Player item-drop access policy script loads", failures)
+
+func _test_player_item_drop_access_policy_matrix(failures: Array[String]) -> void:
+	if _access_policy_script == null:
+		return
+	var known: Array[StringName] = [&"equipment_inventory", &"inventory"]
+	for mask: int in 8:
+		var profile := ProfileState.new_profile("drop-policy-%d" % mask, "Drop Policy", 1000)
+		var unlocked: Array[StringName] = []
+		if mask & 1:
+			profile.permanent_feature_unlocks.append("equipment_inventory")
+			unlocked.append(&"equipment_inventory")
+		if mask & 2:
+			profile.permanent_feature_unlocks.append("inventory")
+			unlocked.append(&"inventory")
+		var inventory := ItemSlotContainer.create(&"drop-policy-inventory", ItemSlotContainer.RUN_INVENTORY, profile.profile_id, 5 if mask & 4 else 0)
+		var feature_policy := FeatureAccessPolicy.new(false, false, known, known, unlocked)
+		TestAssertions.equal(
+			bool(_access_policy_script.call(&"allows", profile, inventory, feature_policy)),
+			mask == 7,
+			"item-drop access matrix mask %d passes only both unlocks plus positive owner capacity" % mask,
+			failures,
+		)
+	var valid_profile := ProfileState.new_profile("drop-policy-null", "Drop Policy Null", 1000)
+	valid_profile.permanent_feature_unlocks = ["equipment_inventory", "inventory"]
+	var valid_inventory := ItemSlotContainer.create(&"drop-policy-null-inventory", ItemSlotContainer.RUN_INVENTORY, valid_profile.profile_id, 5)
+	var valid_policy := FeatureAccessPolicy.new(false, false, known, known, known)
+	TestAssertions.truthy(not bool(_access_policy_script.call(&"allows", null, valid_inventory, valid_policy)), "missing profile fails item-drop access closed", failures)
+	TestAssertions.truthy(not bool(_access_policy_script.call(&"allows", valid_profile, null, valid_policy)), "missing run inventory fails item-drop access closed", failures)
+	TestAssertions.truthy(not bool(_access_policy_script.call(&"allows", valid_profile, valid_inventory, null)), "missing feature policy fails item-drop access closed", failures)
+
+func _test_feature_gate_precedes_random_derivation(failures: Array[String]) -> void:
+	if _access_policy_script == null:
+		return
+	for mask: int in 8:
+		var registry := RunContextRegistry.new()
+		var unlocks: Array[String] = []
+		if mask & 1:
+			unlocks.append("equipment_inventory")
+		if mask & 2:
+			unlocks.append("inventory")
+		var fixture := _context_fixture(
+			StringName("player_gate_%d" % mask),
+			0,
+			"profile-gate-%d" % mask,
+			Vector3.ZERO,
+			Vector3.ONE,
+			unlocks,
+			1 if mask & 4 else 0,
+		)
+		TestAssertions.truthy(registry.register_context(fixture.context as PlayerRunContext).ok(), "drop-gate matrix context %d registers" % mask, failures)
+		var provider := PolicyAccessProvider.new(_access_policy_script)
+		var service := _new_service()
+		var errors := service.call(
+			&"configure",
+			registry,
+			load(REWARD_TUNING_PATH) as RewardDistributionTuning,
+			load(LOOT_TUNING_PATH) as PersonalLootTuning,
+			Callable(provider, "resolve"),
+			false,
+			1.0,
+			&"ordinary_specialist",
+			25,
+		) as PackedStringArray
+		TestAssertions.equal(errors, PackedStringArray(), "drop-gate matrix service %d configures" % mask, failures)
+		var event := EnemyDefeatEvent.create(9042, 100 + mask, 200 + mask, &"swarmer", &"ordinary_melee", Vector3.ZERO, 90.0)
+		var decisions := service.call(&"resolve", event, true, 10000.0) as Array
+		TestAssertions.equal(decisions.size(), 1, "drop-gate matrix mask %d yields one owner decision" % mask, failures)
+		if decisions.size() != 1:
+			continue
+		var decision := decisions[0] as PersonalLootDecision
+		TestAssertions.equal(provider.calls, ["profile-gate-%d" % mask], "drop-gate matrix mask %d evaluates access exactly once" % mask, failures)
+		if mask == 7:
+			TestAssertions.truthy(decision.eligible and decision.success, "all item-drop access conditions authorize the normal roll pipeline", failures)
+			TestAssertions.truthy(decision.basis_points > 0 and decision.generation_seed > 0 and decision.generation_sequence == event.defeat_sequence and decision.item_level > 0, "authorized item drop derives chance and generation facts", failures)
+		else:
+			TestAssertions.equal(decision.reason, &"feature_locked", "denied drop-gate mask %d reports stable feature_locked" % mask, failures)
+			TestAssertions.truthy(not decision.eligible and not decision.success, "denied drop-gate mask %d is neither eligible nor successful" % mask, failures)
+			TestAssertions.equal(
+				[decision.basis_points, decision.roll_basis_points, decision.generation_seed, decision.generation_sequence, decision.item_level],
+				[0, 0, 0, 0, 0],
+				"denied drop-gate mask %d derives no chance random or generation facts" % mask,
+				failures,
+			)
 
 func _test_configuration_contract(failures: Array[String]) -> void:
 	var service := _new_service()
@@ -165,6 +273,15 @@ func _test_per_context_eligibility_and_canonical_decisions(failures: Array[Strin
 
 	for decision: RefCounted in decisions:
 		var run_player_id := StringName(decision.get(&"run_player_id"))
+		if decision.get(&"reason") == &"feature_locked":
+			TestAssertions.equal(
+				[decision.get(&"basis_points"), decision.get(&"roll_basis_points"), decision.get(&"generation_seed"), decision.get(&"generation_sequence"), decision.get(&"item_level")],
+				[0, 0, 0, 0, 0],
+				"%s feature denial precedes every chance and generation fact" % run_player_id,
+				failures,
+			)
+			_assert_canonical_event_facts(decision, event, failures)
+			continue
 		var expected_roll := floori(ItemDeterministicRandom.unit(event.run_seed, event.defeat_sequence, StringName("personal_drop:%s" % run_player_id), 0) * 10000.0)
 		var expected_seed := maxi(("%d|%d|%s|item" % [event.run_seed, event.defeat_sequence, run_player_id]).sha256_text().substr(0, 13).hex_to_int(), 1)
 		TestAssertions.equal(decision.get(&"basis_points"), 200, "%s uses specialist basis points" % run_player_id, failures)
@@ -264,6 +381,8 @@ func _context_fixture(
 	profile_id: String,
 	leader_position: Vector3,
 	follower_position: Vector3,
+	permanent_unlocks: Array[String] = [],
+	inventory_columns: int = 0,
 ) -> Dictionary:
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
@@ -271,10 +390,13 @@ func _context_fixture(
 	party.recruit(catalog.class_by_id(&"ranger"))
 	_parties.append(party)
 	var context := PlayerRunContext.new()
+	var profile := ProfileState.new_profile(profile_id, "Personal Loot Fixture", 1000)
+	profile.permanent_feature_unlocks = permanent_unlocks.duplicate()
+	profile.inventory_columns = inventory_columns
 	var errors := context.configure(
 		run_player_id,
 		slot,
-		ProfileState.new_profile(profile_id, "Personal Loot Fixture", 1000),
+		profile,
 		7000 + slot,
 		party,
 		100,

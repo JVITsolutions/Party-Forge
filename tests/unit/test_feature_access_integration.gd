@@ -160,9 +160,9 @@ func _started_main(root: String, settings: PartyForgeSettings, permanently_unloc
 	manager.create_profile("Test Profile")
 	if permanently_unlocked:
 		var profile := manager.active_profile()
-		profile.permanent_feature_unlocks = ["equipment_inventory"]
+		profile.permanent_feature_unlocks = ["equipment_inventory", "inventory"]
 		profile.inventory_columns = 1
-		TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "permanent equipment and Field Pack fixture saves", failures)
+		TestAssertions.equal(ProfileStore.new().save_profile(profile, root), "", "permanent Equipment Registry and Field Pack fixture saves", failures)
 		TestAssertions.equal(manager.refresh_profile(profile.profile_id), "", "permanent-unlock fixture refreshes", failures)
 	(main.get_node("SettingsScreen") as SettingsScreen).close()
 	main.set("saved_settings", settings.copy())
@@ -182,17 +182,18 @@ func _cleanup_main(main: Node) -> void:
 
 func _test_prefixed_unlocks_do_not_collide(settings: PartyForgeSettings, failures: Array[String]) -> void:
 	var unprefixed := _city_unlock_id(&"equipment-registry", &"feature_unlock")
+	var registry := PassiveEffectRegistry.new()
 	var prefixed: Array[StringName] = [
-		_city_unlock_id(&"arena-charter", &"mode_unlock"),
-		_city_unlock_id(&"artificers-hall", &"city_service_unlock"),
-		_city_unlock_id(&"north-road-charter", &"region_unlock"),
+		registry.unlock_id(PassiveTreeEffect.new(&"mode_unlock", &"set", true, {"modeId": "battle"})),
+		registry.unlock_id(PassiveTreeEffect.new(&"city_service_unlock", &"set", true, {"serviceId": "crafting"})),
+		registry.unlock_id(PassiveTreeEffect.new(&"region_unlock", &"set", true, {"regionId": "north-road"})),
 	]
 	var known_unlocks := prefixed.duplicate()
 	known_unlocks.append(unprefixed)
 	var policy := RunRulesSnapshot.from_settings(settings).feature_policy(LEDGER_FEATURES, known_unlocks, prefixed)
 	TestAssertions.equal(policy.resolve(&"equipment_inventory", FeatureAccessPolicy.State.AVAILABLE, unprefixed), FeatureAccessPolicy.State.HIDDEN, "prefixed mode/service/region unlocks cannot activate an unprefixed feature", failures)
 	TestAssertions.truthy(unprefixed not in prefixed, "passive unlock namespaces remain distinct", failures)
-	TestAssertions.equal(prefixed, [&"mode:battle", &"service:crafting", &"region:north-road"], "City mode/service/region unlock prefixes are exact", failures)
+	TestAssertions.equal(prefixed, [&"mode:battle", &"service:crafting", &"region:north-road"], "future mode/service/region contracts retain exact namespaces without inventing effects on current City nodes", failures)
 
 func _gate_for(settings: PartyForgeSettings, implemented_unlock: StringName, unlocked: Array[StringName] = []) -> LedgerFeatureGate:
 	var implemented_unlocks: Array[StringName] = [implemented_unlock]

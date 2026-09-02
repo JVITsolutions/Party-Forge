@@ -14,6 +14,9 @@ func run() -> Array[String]:
 func _test_node_control_readability_contract(failures: Array[String]) -> void:
 	var node_control := (load(NODE_SCENE_PATH) as PackedScene).instantiate() as Button
 	(Engine.get_main_loop() as SceneTree).root.add_child(node_control)
+	TestAssertions.equal(node_control.custom_minimum_size, Vector2(168.0, 120.0), "passive nodes use the approved enlarged uniform footprint", failures)
+	TestAssertions.equal(node_control.autowrap_mode, TextServer.AUTOWRAP_WORD_SMART, "passive node names wrap at word boundaries", failures)
+	TestAssertions.equal(node_control.text_overrun_behavior, TextServer.OVERRUN_NO_TRIMMING, "passive node names never ellipsize", failures)
 	var visual := node_control.find_child("NodeVisual", false, false) as Control
 	TestAssertions.truthy(visual != null, "node shape uses a dedicated visual child", failures)
 	if visual != null:

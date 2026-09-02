@@ -1,1497 +1,2151 @@
 {
-  "format": "passive-skill-tree",
-  "formatVersion": 1,
-  "treeId": "party-forge-city-v1",
-  "name": "Party Forge City",
-  "startingNodeIds": [
-    "city-heart"
-  ],
-  "nodes": [
+  "archetype": "passive-tree",
+  "assets": [],
+  "content": [
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Trials and Modes progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "arena-charter",
-      "type": "medium",
-      "position": {
-        "x": -450,
-        "y": -60
-      },
       "name": "Arena Charter",
-      "description": "Open Party Forge's future Battle Mode.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "modes-challenges",
-        "medium"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "mode_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "modeId": "battle"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "modes-challenges",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Forge and Equipment progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "artificers-hall",
-      "type": "medium",
-      "position": {
-        "x": 540,
-        "y": -270
-      },
       "name": "Artificers' Hall",
-      "description": "Open the city's crafting service.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "workshop",
-        "medium"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "crafting"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "workshop",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Civic Logistics progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "blueprint-library",
-      "type": "medium",
-      "position": {
-        "x": -450,
-        "y": 60
-      },
       "name": "Blueprint Library",
-      "description": "Preserve discovered crafting recipes between runs.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "profile-legacy",
-        "medium"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "recipe_persistence"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "profile-legacy",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
-      "id": "city-heart",
-      "type": "start",
-      "position": {
-        "x": 0,
-        "y": 0
-      },
-      "name": "City Heart",
-      "description": "The civic center from which Party Forge's persistent city grows.",
-      "cost": 0,
-      "tags": [
-        "party-forge",
-        "city",
-        "city-center",
+      "categoryIds": [
         "start"
       ],
-      "icon": null,
+      "description": "Free starting node.",
       "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "implemented"
+      },
+      "iconAssetId": null,
+      "id": "city-heart",
+      "name": "City Heart",
       "requirements": [],
-      "metadata": {
-        "district": "city-center",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "start"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Civic Logistics progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "civic-archive",
-      "type": "small",
-      "position": {
-        "x": -180,
-        "y": 90
-      },
       "name": "Civic Archive",
-      "description": "Preserve completed-run history in the selected profile.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "profile-legacy",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "run_history"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "profile-legacy",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Trade and Commerce progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "contract-ledger",
-      "type": "medium",
-      "position": {
-        "x": 450,
-        "y": 60
-      },
       "name": "Contract Ledger",
-      "description": "Open merchant contracts for profile-wide trade objectives.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "commerce",
-        "medium"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "merchant_contracts"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "commerce",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Trials and Modes progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "endless-gate",
-      "type": "large",
-      "position": {
-        "x": -720,
-        "y": -360
-      },
       "name": "Endless Gate",
-      "description": "Open the future endless endgame mode.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "modes-challenges",
-        "large"
+        "party-forge",
+        "small"
       ],
-      "icon": null,
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Forge and Equipment progression node.",
       "effects": [
         {
-          "effectId": "mode_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "modeId": "endless"
+          "definitionId": "party-forge-feature-unlock",
+          "values": {
+            "feature-id": "equipment_inventory"
           }
         }
       ],
-      "requirements": [],
-      "metadata": {
-        "district": "modes-challenges",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
-    },
-    {
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "implemented"
+      },
+      "iconAssetId": null,
       "id": "equipment-registry",
-      "type": "small",
-      "position": {
-        "x": 180,
-        "y": -90
-      },
       "name": "Equipment Registry",
-      "description": "Open the Equipment and Inventory service for the profile.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "workshop",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "equipment_inventory"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "workshop",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Heroes and Growth progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "expanded-barracks",
-      "type": "large",
-      "position": {
-        "x": 0,
-        "y": -540
-      },
       "name": "Expanded Barracks",
-      "description": "Expanded quarters increase the maximum party size by 1.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "council-recruitment",
-        "large"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "party_capacity",
-          "operation": "add_flat",
-          "value": 1,
-          "parameters": {
-            "scope": "profile"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "council-recruitment",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
-    },
-    {
-      "id": "expedition-board",
-      "type": "small",
-      "position": {
-        "x": 0,
-        "y": 360
-      },
-      "name": "Expedition Board",
-      "description": "Open expeditions and bounties from the city hub.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "tagIds": [
         "city",
-        "exploration",
+        "party-forge",
         "small"
       ],
-      "icon": null,
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Exploration and Travel progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
+      "id": "expedition-board",
+      "name": "Expedition Board",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "District gateway node.",
       "effects": [
         {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "expeditions"
-          }
-        },
-        {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "bounties"
+          "definitionId": "party-forge-tree-discovery",
+          "values": {
+            "tree-id": "party-forge-expedition-district-v1"
           }
         }
       ],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "portal-gated"
+      },
+      "iconAssetId": null,
+      "id": "expedition-district-charter",
+      "name": "Expedition District Charter",
       "requirements": [],
-      "metadata": {
-        "district": "exploration",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
-      "id": "extraction-license",
-      "type": "large",
-      "position": {
-        "x": -180,
-        "y": 270
-      },
-      "name": "Extraction License",
-      "description": "Authorize one item extraction from a completed run.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "profile-logistics",
-        "large"
+      "categoryIds": [
+        "small"
       ],
-      "icon": null,
+      "description": "Civic Logistics progression node.",
       "effects": [
         {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "item_extraction"
+          "definitionId": "party-forge-feature-unlock",
+          "values": {
+            "feature-id": "item_extraction"
           }
         },
         {
-          "effectId": "extraction_capacity",
-          "operation": "add_flat",
-          "value": 1,
-          "parameters": {
+          "definitionId": "party-forge-extraction-capacity-add",
+          "values": {
+            "amount": 1,
             "scope": "profile"
           }
         }
       ],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "implemented"
+      },
+      "iconAssetId": null,
+      "id": "extraction-license",
+      "name": "Extraction License",
       "requirements": [
         {
-          "requirementId": "allocated_node",
-          "operator": "contains",
-          "value": "field-pack",
-          "parameters": {
-            "treeId": "party-forge-city-v1"
+          "definitionId": "party-forge-allocated-node",
+          "values": {
+            "node-id": "field-pack",
+            "tree-id": "party-forge-city-v1"
           }
         },
         {
-          "requirementId": "allocated_node",
-          "operator": "contains",
-          "value": "stash-access",
-          "parameters": {
-            "treeId": "party-forge-city-v1"
+          "definitionId": "party-forge-allocated-node",
+          "values": {
+            "node-id": "stash-access",
+            "tree-id": "party-forge-city-v1"
           }
         }
       ],
-      "metadata": {
-        "developmentState": "coming-soon",
-        "district": "profile-logistics",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge",
-        "refundPolicy": "permanent"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Civic Logistics progression node.",
+      "effects": [
+        {
+          "definitionId": "party-forge-feature-unlock",
+          "values": {
+            "feature-id": "inventory"
+          }
+        },
+        {
+          "definitionId": "party-forge-inventory-columns-add",
+          "values": {
+            "amount": 1,
+            "scope": "profile"
+          }
+        }
+      ],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "implemented"
+      },
+      "iconAssetId": null,
       "id": "field-pack",
-      "type": "small",
-      "position": {
-        "x": 300,
-        "y": -30
-      },
       "name": "Field Pack",
-      "description": "Unlock profile inventory and expand its column capacity.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "profile-logistics",
+        "party-forge",
         "small"
       ],
-      "icon": null,
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "District gateway node.",
       "effects": [
         {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "inventory"
-          }
-        },
-        {
-          "effectId": "inventory_columns",
-          "operation": "add_flat",
-          "value": 1,
-          "parameters": {
-            "scope": "profile"
+          "definitionId": "party-forge-tree-discovery",
+          "values": {
+            "tree-id": "party-forge-forge-district-v1"
           }
         }
       ],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "portal-gated"
+      },
+      "iconAssetId": null,
+      "id": "forge-district-charter",
+      "name": "Forge District Charter",
       "requirements": [],
-      "metadata": {
-        "developmentState": "coming-soon",
-        "district": "profile-logistics",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge",
-        "refundPolicy": "permanent"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Trade and Commerce progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "grand-exchange",
-      "type": "large",
-      "position": {
-        "x": 720,
-        "y": 360
-      },
       "name": "Grand Exchange",
-      "description": "Establish rerolls and regional goods at the city's central exchange.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "commerce",
-        "large"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "grand_exchange"
-          }
-        },
-        {
-          "effectId": "vendor_reroll_count",
-          "operation": "add_flat",
-          "value": 1,
-          "parameters": {
-            "scope": "profile"
-          }
-        },
-        {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "regional_goods"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "commerce",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Forge and Equipment progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "grand-workshop",
-      "type": "large",
-      "position": {
-        "x": 720,
-        "y": -360
-      },
       "name": "Grand Workshop",
-      "description": "Expand the workshop to support advanced crafting tiers.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "workshop",
-        "large"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "advanced_crafting"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "workshop",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Civic Logistics progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "hall-of-heroes",
-      "type": "large",
-      "position": {
-        "x": -720,
-        "y": 360
-      },
       "name": "Hall of Heroes",
-      "description": "Open the profile-wide collection of discovered and recruited heroes.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "profile-legacy",
-        "large"
+        "party-forge",
+        "small"
       ],
-      "icon": null,
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "District gateway node.",
       "effects": [
         {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "hero_collection"
+          "definitionId": "party-forge-tree-discovery",
+          "values": {
+            "tree-id": "party-forge-hero-district-v1"
           }
         }
       ],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "portal-gated"
+      },
+      "iconAssetId": null,
+      "id": "hero-district-charter",
+      "name": "Hero District Charter",
       "requirements": [],
-      "metadata": {
-        "district": "profile-legacy",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Heroes and Growth progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "hero-registry",
-      "type": "medium",
-      "position": {
-        "x": 0,
-        "y": -720
-      },
       "name": "Hero Registry",
-      "description": "Establish a persistent registry for recruiting and reviewing heroes.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "council-recruitment",
-        "medium"
+        "party-forge",
+        "small"
       ],
-      "icon": null,
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Civic Logistics progression node.",
       "effects": [
         {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "hero_registry"
+          "definitionId": "party-forge-feature-unlock",
+          "values": {
+            "feature-id": "leader_loadout_extraction"
           }
         }
       ],
-      "requirements": [],
-      "metadata": {
-        "district": "council-recruitment",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
-    },
-    {
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "implemented"
+      },
+      "iconAssetId": null,
       "id": "leader-loadout-extraction",
-      "type": "large",
-      "position": {
-        "x": -540,
-        "y": 810
-      },
       "name": "Leader Loadout Extraction",
-      "description": "Extract the leader's complete equipped loadout when a run ends successfully.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "profile-logistics",
-        "large"
+        "party-forge",
+        "small"
       ],
-      "icon": null,
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "District gateway node.",
       "effects": [
         {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "leader_loadout_extraction"
+          "definitionId": "party-forge-tree-discovery",
+          "values": {
+            "tree-id": "party-forge-warehouse-v1"
           }
         }
       ],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "portal-gated"
+      },
+      "iconAssetId": null,
+      "id": "logistics-district-charter",
+      "name": "Logistics District Charter",
       "requirements": [],
-      "metadata": {
-        "developmentState": "coming-soon",
-        "district": "profile-logistics",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge",
-        "refundPolicy": "permanent"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "District gateway node.",
+      "effects": [
+        {
+          "definitionId": "party-forge-tree-discovery",
+          "values": {
+            "tree-id": "party-forge-market-district-v1"
+          }
+        }
+      ],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "portal-gated"
+      },
+      "iconAssetId": null,
+      "id": "market-district-charter",
+      "name": "Market District Charter",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Trade and Commerce progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "merchant-permits",
-      "type": "small",
-      "position": {
-        "x": 360,
-        "y": 180
-      },
       "name": "Merchant Permits",
-      "description": "Add one inventory slot to city vendors.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "commerce",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "vendor_inventory_slots",
-          "operation": "add_flat",
-          "value": 1,
-          "parameters": {
-            "scope": "profile"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "commerce",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Exploration and Travel progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "north-road-charter",
-      "type": "medium",
-      "position": {
-        "x": -180,
-        "y": 450
-      },
       "name": "North Road Charter",
-      "description": "Open the North Road as the city's first external region.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "exploration",
-        "medium"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "region_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "regionId": "north-road"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "exploration",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Trade and Commerce progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "open-market",
-      "type": "small",
-      "position": {
-        "x": 180,
-        "y": 90
-      },
       "name": "Open Market",
-      "description": "Invite permanent vendors into the city.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "commerce",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "city_vendors"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "commerce",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Exploration and Travel progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "pathfinders-charter",
-      "type": "large",
-      "position": {
-        "x": 0,
-        "y": 720
-      },
       "name": "Pathfinder's Charter",
-      "description": "Authorize expeditions into higher-tier regions.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "exploration",
-        "large"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "higher-tier-regions"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "district": "exploration",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Forge and Equipment progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "reclamation-bench",
-      "type": "medium",
-      "position": {
-        "x": 450,
-        "y": -60
-      },
       "name": "Reclamation Bench",
-      "description": "Recover useful materials by salvaging unwanted items.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "workshop",
-        "medium"
+        "party-forge",
+        "small"
       ],
-      "icon": null,
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Civic Logistics progression node.",
       "effects": [
         {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "item_salvage"
+          "definitionId": "party-forge-feature-unlock",
+          "values": {
+            "feature-id": "bring_in_gear"
           }
         }
       ],
-      "requirements": [],
-      "metadata": {
-        "district": "workshop",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
-    },
-    {
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "implemented"
+      },
+      "iconAssetId": null,
       "id": "secured-loadout",
-      "type": "large",
-      "position": {
-        "x": -360,
-        "y": 540
-      },
       "name": "Secured Loadout",
-      "description": "Permit bringing a secured gear loadout into a run.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "profile-logistics",
-        "large"
-      ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "bring_in_gear"
-          }
-        }
-      ],
       "requirements": [],
-      "metadata": {
-        "developmentState": "coming-soon",
-        "district": "profile-logistics",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge",
-        "refundPolicy": "permanent"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Heroes and Growth progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "shared-lessons-1",
-      "type": "small",
-      "position": {
-        "x": 0,
-        "y": -180
-      },
       "name": "Shared Lessons I",
-      "description": "City tutors increase all experience gained during runs by 2%.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "council-recruitment",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "experience_gain",
-          "operation": "add_percent",
-          "value": 2,
-          "parameters": {
-            "scope": "all_run_experience"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "council-recruitment",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Heroes and Growth progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "shared-lessons-2",
-      "type": "small",
-      "position": {
-        "x": 0,
-        "y": -360
-      },
       "name": "Shared Lessons II",
-      "description": "Advanced city tutors increase all experience gained during runs by another 2%.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "council-recruitment",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "experience_gain",
-          "operation": "add_percent",
-          "value": 2,
-          "parameters": {
-            "scope": "all_run_experience"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "council-recruitment",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Forge and Equipment progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "smiths-guild",
-      "type": "small",
-      "position": {
-        "x": 360,
-        "y": -180
-      },
       "name": "Smiths' Guild",
-      "description": "Authorize the city smiths to upgrade equipment.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "workshop",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "equipment_upgrading"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "workshop",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
-      "id": "stash-access",
-      "type": "small",
-      "position": {
-        "x": -360,
-        "y": 180
-      },
-      "name": "Stash Access",
-      "description": "Open persistent storage shared across the profile.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
-        "city",
-        "profile-legacy",
+      "categoryIds": [
         "small"
       ],
-      "icon": null,
+      "description": "Civic Logistics progression node.",
       "effects": [
         {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "stash"
+          "definitionId": "party-forge-feature-unlock",
+          "values": {
+            "feature-id": "stash"
           }
         },
         {
-          "effectId": "stash_tabs",
-          "operation": "add_flat",
-          "value": 1,
-          "parameters": {
+          "definitionId": "party-forge-stash-tabs-add",
+          "values": {
+            "amount": 1,
             "scope": "profile",
-            "slotsPerTab": 100
+            "slots-per-tab": 100
           }
         },
         {
-          "effectId": "building_discovery",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "buildingId": "warehouse"
-          }
-        },
-        {
-          "effectId": "tree_discovery",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "treeId": "party-forge-warehouse-v1"
+          "definitionId": "party-forge-building-discovery",
+          "values": {
+            "building-id": "warehouse"
           }
         }
       ],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "implemented"
+      },
+      "iconAssetId": null,
+      "id": "stash-access",
+      "name": "Stash Access",
       "requirements": [],
-      "metadata": {
-        "developmentState": "coming-soon",
-        "district": "profile-logistics",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge",
-        "refundPolicy": "permanent"
-      }
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Exploration and Travel progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "surveyors-office",
-      "type": "small",
-      "position": {
-        "x": 0,
-        "y": 180
-      },
       "name": "Surveyor's Office",
-      "description": "Create a world map for planning journeys beyond the city.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "exploration",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "world_map"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "exploration",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Trials and Modes progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "training-yard",
-      "type": "small",
-      "position": {
-        "x": -180,
-        "y": -90
-      },
       "name": "Training Yard",
-      "description": "Open a safe practice mode from the city.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "modes-challenges",
+        "party-forge",
         "small"
       ],
-      "icon": null,
-      "effects": [
-        {
-          "effectId": "mode_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "modeId": "practice"
-          }
-        }
-      ],
-      "requirements": [],
-      "metadata": {
-        "district": "modes-challenges",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "typeId": "passive"
     },
     {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Trials and Modes progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
       "id": "trial-monument",
-      "type": "small",
-      "position": {
-        "x": -360,
-        "y": -180
-      },
       "name": "Trial Monument",
-      "description": "Unlock optional challenge modifiers for future runs.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "modes-challenges",
+        "party-forge",
         "small"
       ],
-      "icon": null,
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "District gateway node.",
       "effects": [
         {
-          "effectId": "feature_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "featureId": "challenge_modifiers"
+          "definitionId": "party-forge-tree-discovery",
+          "values": {
+            "tree-id": "party-forge-trials-district-v1"
           }
         }
       ],
-      "requirements": [],
-      "metadata": {
-        "district": "modes-challenges",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
-    },
-    {
-      "id": "waystone-network",
-      "type": "medium",
-      "position": {
-        "x": 0,
-        "y": 540
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
       },
-      "name": "Waystone Network",
-      "description": "Connect discovered destinations through fast travel.",
-      "cost": 1,
-      "tags": [
-        "party-forge",
+      "fieldValues": {
+        "party-forge-activation-state": "portal-gated"
+      },
+      "iconAssetId": null,
+      "id": "trials-district-charter",
+      "name": "Trials District Charter",
+      "requirements": [],
+      "tagIds": [
         "city",
-        "exploration",
-        "medium"
+        "party-forge",
+        "small"
       ],
-      "icon": null,
-      "effects": [
+      "typeId": "passive"
+    },
+    {
+      "categoryIds": [
+        "small"
+      ],
+      "description": "Exploration and Travel progression node.",
+      "effects": [],
+      "extensions": {
+        "evidence": "party-forge-repository-and-approved-design"
+      },
+      "fieldValues": {
+        "party-forge-activation-state": "future"
+      },
+      "iconAssetId": null,
+      "id": "waystone-network",
+      "name": "Waystone Network",
+      "requirements": [],
+      "tagIds": [
+        "city",
+        "party-forge",
+        "small"
+      ],
+      "typeId": "passive"
+    }
+  ],
+  "extensions": {
+    "gameplayConsumer": "party-forge",
+    "partyForgeDomainTreeId": "party-forge-city-v1",
+    "partyForgeStatus": "runtime-integrated"
+  },
+  "format": "latticewright-progression",
+  "formatVersion": 3,
+  "graphPortals": [
+    {
+      "extensions": {},
+      "id": "city-to-expedition-district",
+      "label": "Open Expedition District",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "expedition-district-charter",
+      "targetGraphId": "expedition-district-passive-tree",
+      "targetProjectId": "party-forge-expedition-district"
+    },
+    {
+      "extensions": {},
+      "id": "city-to-forge-district",
+      "label": "Open Forge District",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "forge-district-charter",
+      "targetGraphId": "forge-district-passive-tree",
+      "targetProjectId": "party-forge-forge-district"
+    },
+    {
+      "extensions": {},
+      "id": "city-to-hero-district",
+      "label": "Open Hero District",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "hero-district-charter",
+      "targetGraphId": "hero-district-passive-tree",
+      "targetProjectId": "party-forge-hero-district"
+    },
+    {
+      "extensions": {},
+      "id": "city-to-logistics-district",
+      "label": "Open Logistics District",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "logistics-district-charter",
+      "targetGraphId": "warehouse-passive-tree",
+      "targetProjectId": "party-forge-building-warehouse"
+    },
+    {
+      "extensions": {},
+      "id": "city-to-market-district",
+      "label": "Open Market District",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "market-district-charter",
+      "targetGraphId": "market-district-passive-tree",
+      "targetProjectId": "party-forge-market-district"
+    },
+    {
+      "extensions": {},
+      "id": "city-to-trials-district",
+      "label": "Open Trials District",
+      "role": "drill-down",
+      "sourceGraphId": "city-passive-tree",
+      "sourcePlacementId": "trials-district-charter",
+      "targetGraphId": "trials-district-passive-tree",
+      "targetProjectId": "party-forge-trials-district"
+    }
+  ],
+  "graphs": [
+    {
+      "connections": [
         {
-          "effectId": "city_service_unlock",
-          "operation": "set",
-          "value": true,
-          "parameters": {
-            "serviceId": "fast_travel"
-          }
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-edge-01",
+          "to": "shared-lessons-1"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "shared-lessons-1",
+          "id": "city-edge-02",
+          "to": "shared-lessons-2"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "shared-lessons-2",
+          "id": "city-edge-03",
+          "to": "expanded-barracks"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "expanded-barracks",
+          "id": "city-edge-04",
+          "to": "hero-registry"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-edge-05",
+          "to": "equipment-registry"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "equipment-registry",
+          "id": "city-edge-06",
+          "to": "smiths-guild"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "smiths-guild",
+          "id": "city-edge-07",
+          "to": "reclamation-bench"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "smiths-guild",
+          "id": "city-edge-08",
+          "to": "artificers-hall"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "artificers-hall",
+          "id": "city-edge-09",
+          "to": "grand-workshop"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-edge-10",
+          "to": "open-market"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "open-market",
+          "id": "city-edge-11",
+          "to": "merchant-permits"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "merchant-permits",
+          "id": "city-edge-12",
+          "to": "contract-ledger"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "merchant-permits",
+          "id": "city-edge-13",
+          "to": "grand-exchange"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-edge-14",
+          "to": "surveyors-office"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "surveyors-office",
+          "id": "city-edge-15",
+          "to": "expedition-board"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "expedition-board",
+          "id": "city-edge-16",
+          "to": "north-road-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "expedition-board",
+          "id": "city-edge-17",
+          "to": "waystone-network"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "waystone-network",
+          "id": "city-edge-18",
+          "to": "pathfinders-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-edge-19",
+          "to": "stash-access"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "civic-archive",
+          "id": "city-edge-20",
+          "to": "stash-access"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "stash-access",
+          "id": "city-edge-21",
+          "to": "blueprint-library"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "stash-access",
+          "id": "city-edge-22",
+          "to": "hall-of-heroes"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "city-heart",
+          "id": "city-edge-23",
+          "to": "training-yard"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "training-yard",
+          "id": "city-edge-24",
+          "to": "trial-monument"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "trial-monument",
+          "id": "city-edge-25",
+          "to": "arena-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "trial-monument",
+          "id": "city-edge-26",
+          "to": "endless-gate"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "equipment-registry",
+          "id": "city-edge-27",
+          "to": "field-pack"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "field-pack",
+          "id": "city-edge-28",
+          "to": "extraction-license"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "stash-access",
+          "id": "city-edge-29",
+          "to": "extraction-license"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "extraction-license",
+          "id": "city-edge-30",
+          "to": "secured-loadout"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "secured-loadout",
+          "id": "city-edge-31",
+          "to": "leader-loadout-extraction"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "hero-registry",
+          "id": "city-edge-32",
+          "to": "hero-district-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "endless-gate",
+          "id": "city-edge-33",
+          "to": "trials-district-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "grand-exchange",
+          "id": "city-edge-34",
+          "to": "market-district-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "pathfinders-charter",
+          "id": "city-edge-35",
+          "to": "expedition-district-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "grand-workshop",
+          "id": "city-edge-36",
+          "to": "forge-district-charter"
+        },
+        {
+          "conditions": [],
+          "cost": 0,
+          "direction": "bidirectional",
+          "extensions": {},
+          "from": "leader-loadout-extraction",
+          "id": "city-edge-37",
+          "to": "logistics-district-charter"
         }
       ],
-      "requirements": [],
-      "metadata": {
-        "district": "exploration",
-        "integrationStatus": "future-contract",
-        "integrationTarget": "party-forge"
-      }
+      "decorations": [],
+      "extensions": {},
+      "groups": [],
+      "id": "city-passive-tree",
+      "name": "City Passive Tree",
+      "placements": [
+        {
+          "contentId": "arena-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "arena-charter",
+          "position": {
+            "x": 14,
+            "y": 139
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "artificers-hall",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "artificers-hall",
+          "position": {
+            "x": 1041,
+            "y": 556
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "blueprint-library",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "blueprint-library",
+          "position": {
+            "x": 253,
+            "y": 556
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "city-heart",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 0
+          },
+          "id": "city-heart",
+          "position": {
+            "x": 619,
+            "y": 278
+          },
+          "typeId": "start-node"
+        },
+        {
+          "contentId": "civic-archive",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "civic-archive",
+          "position": {
+            "x": 239,
+            "y": 417
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "contract-ledger",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "contract-ledger",
+          "position": {
+            "x": 1182,
+            "y": 0
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "endless-gate",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "endless-gate",
+          "position": {
+            "x": 197,
+            "y": 0
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "equipment-registry",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "equipment-registry",
+          "position": {
+            "x": 633,
+            "y": 417
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "expanded-barracks",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "expanded-barracks",
+          "position": {
+            "x": 591,
+            "y": 0
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "expedition-board",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "expedition-board",
+          "position": {
+            "x": 1013,
+            "y": 278
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "expedition-district-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "expedition-district-charter",
+          "position": {
+            "x": 1252,
+            "y": 695
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "extraction-license",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "extraction-license",
+          "position": {
+            "x": 450,
+            "y": 556
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "field-pack",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "field-pack",
+          "position": {
+            "x": 647,
+            "y": 556
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "forge-district-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "forge-district-charter",
+          "position": {
+            "x": 858,
+            "y": 695
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "grand-exchange",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "grand-exchange",
+          "position": {
+            "x": 1196,
+            "y": 139
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "grand-workshop",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "grand-workshop",
+          "position": {
+            "x": 1055,
+            "y": 695
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "hall-of-heroes",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "hall-of-heroes",
+          "position": {
+            "x": 225,
+            "y": 278
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "hero-district-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "hero-district-charter",
+          "position": {
+            "x": 985,
+            "y": 0
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "hero-registry",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "hero-registry",
+          "position": {
+            "x": 788,
+            "y": 0
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "leader-loadout-extraction",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "leader-loadout-extraction",
+          "position": {
+            "x": 267,
+            "y": 695
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "logistics-district-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "logistics-district-charter",
+          "position": {
+            "x": 70,
+            "y": 695
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "market-district-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "market-district-charter",
+          "position": {
+            "x": 1210,
+            "y": 278
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "merchant-permits",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "merchant-permits",
+          "position": {
+            "x": 999,
+            "y": 139
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "north-road-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "north-road-charter",
+          "position": {
+            "x": 1027,
+            "y": 417
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "open-market",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "open-market",
+          "position": {
+            "x": 802,
+            "y": 139
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "pathfinders-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "pathfinders-charter",
+          "position": {
+            "x": 1238,
+            "y": 556
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "reclamation-bench",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "reclamation-bench",
+          "position": {
+            "x": 844,
+            "y": 556
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "secured-loadout",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "secured-loadout",
+          "position": {
+            "x": 464,
+            "y": 695
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "shared-lessons-1",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "shared-lessons-1",
+          "position": {
+            "x": 605,
+            "y": 139
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "shared-lessons-2",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "shared-lessons-2",
+          "position": {
+            "x": 394,
+            "y": 0
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "smiths-guild",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "smiths-guild",
+          "position": {
+            "x": 830,
+            "y": 417
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "stash-access",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "stash-access",
+          "position": {
+            "x": 436,
+            "y": 417
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "surveyors-office",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "surveyors-office",
+          "position": {
+            "x": 816,
+            "y": 278
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "training-yard",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "training-yard",
+          "position": {
+            "x": 408,
+            "y": 139
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "trial-monument",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "trial-monument",
+          "position": {
+            "x": 211,
+            "y": 139
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "trials-district-charter",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "trials-district-charter",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "typeId": "small-node"
+        },
+        {
+          "contentId": "waystone-network",
+          "extensions": {},
+          "fieldValues": {
+            "node-cost": 1
+          },
+          "id": "waystone-network",
+          "position": {
+            "x": 1224,
+            "y": 417
+          },
+          "typeId": "small-node"
+        }
+      ],
+      "startingPlacementIds": [
+        "city-heart"
+      ]
     }
   ],
-  "connections": [
-    {
-      "id": "city-edge-01",
-      "from": "city-heart",
-      "to": "shared-lessons-1",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
+  "name": "Party Forge City",
+  "projectId": "party-forge-city",
+  "schemas": {
+    "categories": [
+      {
+        "description": "large progression tier.",
+        "id": "large",
+        "name": "Large"
+      },
+      {
+        "description": "medium progression tier.",
+        "id": "medium",
+        "name": "Medium"
+      },
+      {
+        "description": "small progression tier.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "start progression tier.",
+        "id": "start",
+        "name": "Start"
       }
-    },
-    {
-      "id": "city-edge-02",
-      "from": "shared-lessons-1",
-      "to": "shared-lessons-2",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
+    ],
+    "contentTypes": [
+      {
+        "description": "A Party Forge progression design node.",
+        "fieldIds": [
+          "party-forge-activation-state"
+        ],
+        "id": "passive",
+        "name": "Passive"
       }
-    },
-    {
-      "id": "city-edge-03",
-      "from": "shared-lessons-2",
-      "to": "expanded-barracks",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
+    ],
+    "currencies": [],
+    "effects": [
+      {
+        "description": "Discovers one permanent Party Forge building.",
+        "descriptionTemplate": "Discover building {building-id}.",
+        "id": "party-forge-building-discovery",
+        "name": "Party Forge Building Discovery",
+        "parameterDefinitions": [
+          {
+            "id": "building-id",
+            "name": "Building ID",
+            "required": true,
+            "valueType": "text"
+          }
+        ]
+      },
+      {
+        "description": "Adds permanent profile extraction capacity.",
+        "descriptionTemplate": "Add {amount} extraction capacity to {scope}.",
+        "id": "party-forge-extraction-capacity-add",
+        "name": "Party Forge Extraction Capacity Add",
+        "parameterDefinitions": [
+          {
+            "id": "amount",
+            "name": "Amount",
+            "required": true,
+            "valueType": "number"
+          },
+          {
+            "allowedValues": [
+              "profile"
+            ],
+            "id": "scope",
+            "name": "Scope",
+            "required": true,
+            "valueType": "enum"
+          }
+        ]
+      },
+      {
+        "description": "Unlocks one permanent Party Forge feature.",
+        "descriptionTemplate": "Unlock feature {feature-id}.",
+        "id": "party-forge-feature-unlock",
+        "name": "Party Forge Feature Unlock",
+        "parameterDefinitions": [
+          {
+            "id": "feature-id",
+            "name": "Feature ID",
+            "required": true,
+            "valueType": "text"
+          }
+        ]
+      },
+      {
+        "description": "Adds permanent profile inventory columns.",
+        "descriptionTemplate": "Add {amount} inventory columns to {scope}.",
+        "id": "party-forge-inventory-columns-add",
+        "name": "Party Forge Inventory Columns Add",
+        "parameterDefinitions": [
+          {
+            "id": "amount",
+            "name": "Amount",
+            "required": true,
+            "valueType": "number"
+          },
+          {
+            "allowedValues": [
+              "profile"
+            ],
+            "id": "scope",
+            "name": "Scope",
+            "required": true,
+            "valueType": "enum"
+          }
+        ]
+      },
+      {
+        "description": "Adds permanent profile stash tabs.",
+        "descriptionTemplate": "Add {amount} stash tabs with {slots-per-tab} slots each to {scope}.",
+        "id": "party-forge-stash-tabs-add",
+        "name": "Party Forge Stash Tabs Add",
+        "parameterDefinitions": [
+          {
+            "id": "amount",
+            "name": "Amount",
+            "required": true,
+            "valueType": "number"
+          },
+          {
+            "allowedValues": [
+              "profile"
+            ],
+            "id": "scope",
+            "name": "Scope",
+            "required": true,
+            "valueType": "enum"
+          },
+          {
+            "id": "slots-per-tab",
+            "name": "Slots Per Tab",
+            "required": true,
+            "valueType": "number"
+          }
+        ]
+      },
+      {
+        "description": "Discovers one permanent Party Forge passive tree.",
+        "descriptionTemplate": "Discover passive tree {tree-id}.",
+        "id": "party-forge-tree-discovery",
+        "name": "Party Forge Tree Discovery",
+        "parameterDefinitions": [
+          {
+            "id": "tree-id",
+            "name": "Tree ID",
+            "required": true,
+            "valueType": "text"
+          }
+        ]
       }
-    },
-    {
-      "id": "city-edge-04",
-      "from": "expanded-barracks",
-      "to": "hero-registry",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
+    ],
+    "fields": [
+      {
+        "id": "node-cost",
+        "minimum": 0,
+        "name": "Point Cost",
+        "owner": "placement",
+        "required": true,
+        "valueType": "number"
+      },
+      {
+        "allowedValues": [
+          "future",
+          "implemented",
+          "portal-gated"
+        ],
+        "id": "party-forge-activation-state",
+        "name": "Party Forge Activation State",
+        "owner": "content",
+        "required": true,
+        "valueType": "enum"
       }
-    },
-    {
-      "id": "city-edge-05",
-      "from": "city-heart",
-      "to": "equipment-registry",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
+    ],
+    "placementTypes": [
+      {
+        "description": "large progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "large-node",
+        "name": "Large Node",
+        "shape": "large"
+      },
+      {
+        "description": "medium progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "medium-node",
+        "name": "Medium Node",
+        "shape": "medium"
+      },
+      {
+        "description": "small progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "small-node",
+        "name": "Small Node",
+        "shape": "small"
+      },
+      {
+        "description": "start progression placement.",
+        "fieldIds": [
+          "node-cost"
+        ],
+        "id": "start-node",
+        "name": "Start Node",
+        "shape": "start"
       }
-    },
-    {
-      "id": "city-edge-06",
-      "from": "equipment-registry",
-      "to": "smiths-guild",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
+    ],
+    "ranks": [],
+    "requirements": [
+      {
+        "description": "Requires one allocated Party Forge passive-tree node.",
+        "id": "party-forge-allocated-node",
+        "name": "Party Forge Allocated Node",
+        "parameterDefinitions": [
+          {
+            "id": "tree-id",
+            "name": "Tree ID",
+            "required": true,
+            "valueType": "text"
+          },
+          {
+            "id": "node-id",
+            "name": "Node ID",
+            "required": true,
+            "valueType": "text"
+          }
+        ]
       }
-    },
-    {
-      "id": "city-edge-07",
-      "from": "smiths-guild",
-      "to": "reclamation-bench",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
+    ],
+    "tags": [
+      {
+        "description": "Party Forge city design tag.",
+        "id": "city",
+        "name": "City"
+      },
+      {
+        "description": "Party Forge party-forge design tag.",
+        "id": "party-forge",
+        "name": "Party Forge"
+      },
+      {
+        "description": "Party Forge small design tag.",
+        "id": "small",
+        "name": "Small"
+      },
+      {
+        "description": "Party Forge start design tag.",
+        "id": "start",
+        "name": "Start"
       }
-    },
-    {
-      "id": "city-edge-08",
-      "from": "smiths-guild",
-      "to": "artificers-hall",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-09",
-      "from": "artificers-hall",
-      "to": "grand-workshop",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-10",
-      "from": "city-heart",
-      "to": "open-market",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-11",
-      "from": "open-market",
-      "to": "merchant-permits",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-12",
-      "from": "merchant-permits",
-      "to": "contract-ledger",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-13",
-      "from": "merchant-permits",
-      "to": "grand-exchange",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-14",
-      "from": "city-heart",
-      "to": "surveyors-office",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-15",
-      "from": "surveyors-office",
-      "to": "expedition-board",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-16",
-      "from": "expedition-board",
-      "to": "north-road-charter",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-17",
-      "from": "expedition-board",
-      "to": "waystone-network",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-18",
-      "from": "waystone-network",
-      "to": "pathfinders-charter",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-19",
-      "from": "city-heart",
-      "to": "civic-archive",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-20",
-      "from": "civic-archive",
-      "to": "stash-access",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-21",
-      "from": "stash-access",
-      "to": "blueprint-library",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-22",
-      "from": "stash-access",
-      "to": "hall-of-heroes",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-23",
-      "from": "city-heart",
-      "to": "training-yard",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-24",
-      "from": "training-yard",
-      "to": "trial-monument",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-25",
-      "from": "trial-monument",
-      "to": "arena-charter",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-26",
-      "from": "trial-monument",
-      "to": "endless-gate",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-27",
-      "from": "equipment-registry",
-      "to": "field-pack",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-28",
-      "from": "field-pack",
-      "to": "extraction-license",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-29",
-      "from": "stash-access",
-      "to": "extraction-license",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-30",
-      "from": "extraction-license",
-      "to": "secured-loadout",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    },
-    {
-      "id": "city-edge-31",
-      "from": "secured-loadout",
-      "to": "leader-loadout-extraction",
-      "direction": "bidirectional",
-      "cost": 0,
-      "conditions": [],
-      "metadata": {
-        "fixture": "party-forge-city-v1"
-      }
-    }
-  ],
-  "metadata": {
-    "audience": "Party Forge",
-    "contractVersion": 1,
-    "fixtureRole": "golden-cross-project-test",
-    "theme": "city-meta-progression"
+    ]
+  },
+  "vocabulary": {
+    "contentPlural": "Passives",
+    "contentSingular": "Passive",
+    "graphPlural": "Passive Trees",
+    "graphSingular": "Passive Tree",
+    "placementPlural": "Nodes",
+    "placementSingular": "Node"
   }
 }

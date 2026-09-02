@@ -3,11 +3,13 @@ extends RefCounted
 
 const CITY_PATH := "res://data/passive_trees/city/party-forge-city.pstree.json"
 
-static func load_defaults() -> PassiveTreeLoadResult:
-	return load_path(CITY_PATH)
+static func load_defaults(portfolio: LatticewrightRuntimePortfolioRegistry = null) -> PassiveTreeLoadResult:
+	return load_path(CITY_PATH, portfolio)
 
-static func load_path(path: String) -> PassiveTreeLoadResult:
-	var result := PassiveTreeLoader.new().load_path(path)
+static func load_path(path: String, portfolio: LatticewrightRuntimePortfolioRegistry = null) -> PassiveTreeLoadResult:
+	var adapters := LatticewrightRuntimeAdapterRegistry.new()
+	adapters.register_adapter(3, Callable(LatticewrightRuntimeV3CityAdapter, "translate"))
+	var result := adapters.load_path(path)
 	if not result.ok():
 		return result
 	var effect_registry := PassiveEffectRegistry.new()
@@ -35,4 +37,10 @@ static func load_path(path: String) -> PassiveTreeLoadResult:
 	if not semantic_errors.is_empty():
 		result.errors.append_array(semantic_errors)
 		result.tree = null
+		return result
+	if portfolio != null:
+		var registration_error := portfolio.register_runtime(result.source_document)
+		if not registration_error.is_empty():
+			result.errors.append("PARTY_FORGE_PASSIVE_TREE_PORTFOLIO_REGISTRATION_ERROR reason=%s" % registration_error)
+			result.tree = null
 	return result

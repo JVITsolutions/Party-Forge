@@ -135,11 +135,11 @@ func _run() -> void:
 	_assert_focus(viewport, primary, "run-setup cancel exact PrimaryAction return")
 
 	var profile_id := main.active_profile().profile_id
-	var mutation := ProfileMutationService.new(ProfileStore.new()).complete_prologue(profile_id, "task-8-complete", _profile_root)
-	_assert(mutation.ok(), "completed-profile fixture uses the production prologue mutation")
-	_assert(main.profile_manager.refresh_profile(profile_id).is_empty(), "main profile manager refreshes completed profile")
+	var mutation := ProfileTestSupport.commit_city_victory(profile_id, "navigation-first-victory", _profile_root)
+	_assert(mutation.ok(), "City navigation fixture commits first-victory discovery")
+	_assert(main.profile_manager.refresh_profile(profile_id).is_empty(), "main profile manager refreshes first-victory profile")
 	await _frames(2)
-	_assert(city.visible and not city.disabled, "completed profile exposes City")
+	_assert(city.visible and not city.disabled, "first-victory profile exposes City")
 	await _key(viewport, KEY_TAB)
 	_assert_focus(viewport, city, "keyboard Tab moves to the exact City origin")
 	await _mouse_click(viewport, city)
