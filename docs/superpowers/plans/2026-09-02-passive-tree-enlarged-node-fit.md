@@ -68,7 +68,7 @@ Set these exact properties on the root `Button` in `passive_tree_node_control.ts
 ```text
 custom_minimum_size = Vector2(168, 120)
 text_overrun_behavior = 0
-autowrap_mode = 2
+autowrap_mode = 3
 ```
 
 Retain the native button label, existing node visual child, focusability, state colors, outline, tooltip, and activation signal.
