@@ -14,7 +14,7 @@
 - This plan implements **Milestone 1 only**. Milestones 2-5 remain design-gated. Do not invent effects, tuning, target runtimes, or detailed behavior for the 24 `future` nodes or activate any of the six `portal-gated` charters without its exact registered target.
 - Authoritative repositories are `E:\Projects\Passive Skill Tree Creator` for LatticeWright and `F:\Projects(root)\Game dev\Projects\party-forge` for Party Forge. Never treat the saved parent project as the Party Forge repository.
 - Execute in dedicated isolated worktrees. Do not use or alter LatticeWright's existing `party-forge-city-logistics` worktree or its untracked autosave. Do not alter any other user-owned worktree.
-- This task's standing authority forbids creating or delegating another task or subagent. Execute with `superpowers:executing-plans` in this same task. Requirements review and code-quality review are two sequential, recorded review passes by the root agent against the same immutable candidates.
+- This task may use exactly two reusable subagents under `superpowers:subagent-driven-development`: one `gpt-5.6-luna` agent at `max` reasoning for bounded implementation/fix work, and one `gpt-5.6-sol` agent at `high` reasoning for sequential task and whole-branch reviews. The root agent retains worktree, containment, integration, visual-handoff, and publication control. Never run two write-heavy implementation tasks in parallel.
 - Use strict TDD: demonstrate each new test failing for the intended reason, implement only enough to pass, then refactor without changing behavior.
 - Do not invoke the WinGet Godot executable. Use `F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe` for shell gates and the already approved Godot AI connection for focused editor-backed checks.
 - The old Party Forge format-1 City data path is obsolete. There is no format-3-to-format-1 conversion, compatibility projection, or fallback. Unsupported format 4+ must produce an adapter-unavailable error until a future adapter is approved.
@@ -733,13 +733,13 @@ Record each repository's commit, parents, branch, status, diff-check, worktree f
 
 - [ ] **Step 2: Perform the requirements review first**
 
-Create a 15-row trace against every acceptance criterion in the approved spec. For each row cite exact production file/line, test, command, PASS marker, and evidence hash. Explicitly scan for excluded work, format-1 fallback, stale 31-node counts, obsolete 15 portals, stale prologue copy, a second readiness list, and any item-generation call reachable before access.
+The authorized Sol-high reviewer creates a 15-row trace against every acceptance criterion in the approved spec. For each row cite exact production file/line, test, command, PASS marker, and evidence hash. Explicitly scan for excluded work, format-1 fallback, stale 31-node counts, obsolete 15 portals, stale prologue copy, a second readiness list, and any item-generation call reachable before access.
 
 If any criterion lacks direct evidence, return to its owning task. Do not begin code-quality review until all 15 rows pass.
 
 - [ ] **Step 3: Perform the code-quality review second**
 
-Review the same immutable commits for defensive copies, exact-key validation, overflow, error atomicity, duplicate/replay behavior, dependency ownership, mutation-time revalidation, nonpersistent developer behavior, geometry numerical boundaries, test isolation, and absence of test-only production APIs. Resolve findings through red tests and new commits, then repeat requirements review before repeating code-quality review.
+After requirements pass, the same Sol-high reviewer examines the same immutable commits for defensive copies, exact-key validation, overflow, error atomicity, duplicate/replay behavior, dependency ownership, mutation-time revalidation, nonpersistent developer behavior, geometry numerical boundaries, test isolation, and absence of test-only production APIs. The Luna-max implementer resolves findings through red tests and new commits, then the Sol-high reviewer repeats requirements review before repeating code-quality review.
 
 - [ ] **Step 4: Run full LatticeWright qualification**
 
