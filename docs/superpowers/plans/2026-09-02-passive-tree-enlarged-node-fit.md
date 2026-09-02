@@ -152,6 +152,7 @@ Commit: `feat: reflow Party Forge City layout`
 - Replace from Task 1: `data/passive_trees/city/party-forge-city.pstree.json`
 - Modify: `scripts/progression/passive_tree/city_tree_geometry_validator.gd`
 - Modify: `tests/unit/test_latticewright_runtime_v3_city_adapter.gd`
+- Modify: `tests/unit/test_passive_tree_artifact_sync.gd`
 - Modify: `tests/unit/test_passive_tree_readability.gd`
 - Modify: `tests/unit/test_passive_tree_screen.gd`
 - Modify: `scenes/ui/passive_tree/passive_tree_node_control.tscn`
@@ -204,6 +205,8 @@ const RIGHT_ANGLE_EXCLUSION_DEGREES := 4.0
 ```
 
 Keep the existing enlarged node scene and production fit implementation. Refactor only if a current test exposes a real defect; do not alter the approved footprint, margins, wrap mode, or fit lifecycle.
+
+Update only the expected source/runtime SHA-256 constants in `test_passive_tree_artifact_sync.gd` and the expected runtime SHA-256 constant in `latticewright_city_v3_runner.gd` to the reviewed Task 1 artifact hashes. No hash assertion may be removed or weakened.
 
 - [ ] **Step 4: Run focused GREEN and the four Task 8 acceptance runners**
 
