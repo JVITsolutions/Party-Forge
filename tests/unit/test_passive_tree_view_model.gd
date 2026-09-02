@@ -154,15 +154,15 @@ func _test_developer_reveal_is_view_only(failures: Array[String]) -> void:
 	TestAssertions.equal(_node(view_model.build(tree, profile, false), &"z-obscured").display_name, "???", "Developer reveal cannot affect later player builds", failures)
 
 func _test_committed_city_projection_is_lexical(failures: Array[String]) -> void:
-	var load_result := PassiveTreeLoader.new().load_path("res://data/passive_trees/city/party-forge-city.pstree.json")
+	var load_result := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(load_result.ok(), "committed City tree loads for view projection", failures)
 	if not load_result.ok():
 		return
 	var profile := _profile(load_result.tree.id)
 	var result := _view_model().build(load_result.tree, profile, true)
 	TestAssertions.equal(result["tree_id"], &"party-forge-city-v1", "committed City stable tree ID", failures)
-	TestAssertions.equal((result["nodes"] as Array).size(), 31, "committed City projects every node", failures)
-	TestAssertions.equal((result["connections"] as Array).size(), 31, "committed City projects every connection", failures)
+	TestAssertions.equal((result["nodes"] as Array).size(), 37, "committed City projects every node", failures)
+	TestAssertions.equal((result["connections"] as Array).size(), 37, "committed City projects every connection", failures)
 	var node_ids: Array[String] = []
 	for view: PassiveTreeNodeViewData in result["nodes"]:
 		node_ids.append(String(view.id))

@@ -44,6 +44,10 @@ const LOGISTICS_IDS: Array[StringName] = [
 	&"field-pack", &"stash-access", &"extraction-license", &"secured-loadout",
 	&"leader-loadout-extraction",
 ]
+const CITY_EFFECT_IDS: Array[StringName] = [
+	&"building_discovery", &"extraction_capacity", &"feature_unlock",
+	&"inventory_columns", &"stash_tabs", &"tree_discovery",
+]
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -53,6 +57,7 @@ func run() -> Array[String]:
 	_test_effect_presentation_contracts(failures)
 	_test_requirement_contract(failures)
 	_test_requirement_presentation_contract(failures)
+	_test_portal_domain_copy(failures)
 	_test_leader_loadout_extraction_contract(failures)
 	_test_city_policy(failures)
 	_test_default_catalog(failures)
@@ -61,13 +66,11 @@ func run() -> Array[String]:
 
 func _test_all_registered_effect_contracts(failures: Array[String]) -> void:
 	var registry := PassiveEffectRegistry.new()
-	var expected_ids: Array[StringName] = []
 	for contract: Array in EFFECT_CONTRACTS:
 		var effect := _effect(contract)
-		expected_ids.append(effect.effect_id)
 		TestAssertions.equal(registry.validate(effect), "", "%s exact contract validates" % effect.effect_id, failures)
 
-	var city_result := PassiveTreeLoader.new().load_path(CITY_PATH)
+	var city_result := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(city_result.ok(), "City fixture is structurally available to contract tests", failures)
 	if not city_result.ok():
 		return
@@ -77,6 +80,7 @@ func _test_all_registered_effect_contracts(failures: Array[String]) -> void:
 			TestAssertions.equal(registry.validate(effect), "", "City %s effect validates" % tree_node.id, failures)
 			if effect.effect_id not in city_ids:
 				city_ids.append(effect.effect_id)
+	var expected_ids := CITY_EFFECT_IDS.duplicate()
 	expected_ids.sort()
 	city_ids.sort()
 	TestAssertions.equal(city_ids, expected_ids, "City uses exactly every registered Task 5 effect ID", failures)
@@ -181,29 +185,41 @@ func _test_requirement_presentation_contract(failures: Array[String]) -> void:
 	TestAssertions.equal(registry.display_name(&"unknown_requirement"), "", "unknown requirement has no display name", failures)
 	TestAssertions.equal(registry.keyword_explanation(&"unknown_requirement"), "", "unknown requirement has no keyword explanation", failures)
 
+func _test_portal_domain_copy(failures: Array[String]) -> void:
+	var source_portal := PassiveTreePortal.new(
+		&"portal", &"charter", "Open District", &"drill-down",
+		&"target-project", &"target-graph", &"target-tree",
+	)
+	var source_portals: Array[PassiveTreePortal] = [source_portal]
+	var tree := PassiveTreeDefinition.new(&"tree", "Tree", [], [], [], {}, source_portals)
+	source_portals.clear()
+	source_portal.label = "Mutated"
+	TestAssertions.equal(tree.portals.size(), 1, "tree copies the portal collection", failures)
+	TestAssertions.equal(tree.portals[0].label, "Open District", "tree copies portal records", failures)
+	TestAssertions.equal(tree.portal_for_source_node(&"charter").target_graph_id, &"target-graph", "portal lookup uses exact source node", failures)
+	TestAssertions.equal(tree.portal_for_source_node(&"missing"), null, "unknown portal source stays absent", failures)
+
 func _test_leader_loadout_extraction_contract(failures: Array[String]) -> void:
-	var document := _city_document()
-	var extraction_node := _document_node(document, "leader-loadout-extraction")
-	TestAssertions.truthy(not extraction_node.is_empty(), "City contains Leader Loadout Extraction", failures)
-	if extraction_node.is_empty():
+	var result := PassiveTreeCatalog.load_defaults()
+	TestAssertions.truthy(result.ok(), "City loads for Leader Loadout Extraction contract", failures)
+	if not result.ok():
 		return
-	TestAssertions.equal(extraction_node.get("name"), "Leader Loadout Extraction", "leader extraction name", failures)
-	TestAssertions.equal(extraction_node.get("type"), "large", "leader extraction is large", failures)
-	TestAssertions.equal(extraction_node.get("cost"), 1, "leader extraction costs one Passive Point", failures)
-	TestAssertions.equal(extraction_node.get("effects"), [{
-		"effectId": "feature_unlock",
-		"operation": "set",
-		"value": true,
-		"parameters": {"featureId": "leader_loadout_extraction"},
-	}], "leader extraction exact feature unlock", failures)
-	TestAssertions.equal(extraction_node.get("metadata", {}).get("developmentState"), "coming-soon", "leader extraction development state", failures)
-	TestAssertions.equal(extraction_node.get("metadata", {}).get("refundPolicy"), "permanent", "leader extraction cannot be refunded", failures)
+	var extraction_node := result.tree.node(&"leader-loadout-extraction")
+	TestAssertions.truthy(extraction_node != null, "City contains Leader Loadout Extraction", failures)
+	if extraction_node == null:
+		return
+	TestAssertions.equal(extraction_node.name, "Leader Loadout Extraction", "leader extraction name", failures)
+	TestAssertions.equal(extraction_node.type, &"small", "leader extraction uses authored small placement", failures)
+	TestAssertions.equal(extraction_node.cost, 1, "leader extraction costs one Passive Point", failures)
+	TestAssertions.equal(extraction_node.effects.size(), 1, "leader extraction has one effect", failures)
+	TestAssertions.equal(extraction_node.effects[0].effect_id, &"feature_unlock", "leader extraction effect maps", failures)
+	TestAssertions.equal(extraction_node.effects[0].parameters, {"featureId": "leader_loadout_extraction"}, "leader extraction exact feature unlock", failures)
+	TestAssertions.equal(extraction_node.metadata.get("activationState"), "implemented", "leader extraction is authored implemented", failures)
 	var adjacent := false
-	for connection_value: Variant in document.get("connections", []):
-		var connection := connection_value as Dictionary
-		if (connection.get("from") == "secured-loadout" and connection.get("to") == "leader-loadout-extraction") \
-		or (connection.get("from") == "leader-loadout-extraction" and connection.get("to") == "secured-loadout"):
-			adjacent = connection.get("direction") == "bidirectional" and connection.get("cost") == 0
+	for connection: PassiveTreeConnection in result.tree.connections:
+		if (connection.from_id == &"secured-loadout" and connection.to_id == &"leader-loadout-extraction") \
+		or (connection.from_id == &"leader-loadout-extraction" and connection.to_id == &"secured-loadout"):
+			adjacent = connection.direction == &"bidirectional" and connection.cost == 0
 	TestAssertions.truthy(adjacent, "Leader Loadout Extraction is adjacent to Secured Loadout by one bidirectional zero-cost edge", failures)
 
 func _test_city_policy(failures: Array[String]) -> void:
@@ -224,10 +240,13 @@ func _test_city_policy(failures: Array[String]) -> void:
 
 	var missing_node_tree := _load_city_tree(failures)
 	missing_node_tree.nodes.remove_at(0)
-	_assert_policy_invalid(policy, missing_node_tree, "City requires exactly 31 nodes", "31 nodes", failures)
+	_assert_policy_invalid(policy, missing_node_tree, "City requires exactly 37 nodes", "37 nodes", failures)
 	var missing_connection_tree := _load_city_tree(failures)
 	missing_connection_tree.connections.remove_at(0)
-	_assert_policy_invalid(policy, missing_connection_tree, "City requires exactly 31 connections", "31 connections", failures)
+	_assert_policy_invalid(policy, missing_connection_tree, "City requires exactly 37 connections", "37 connections", failures)
+	var missing_portal_tree := _load_city_tree(failures)
+	missing_portal_tree.portals.remove_at(0)
+	_assert_policy_invalid(policy, missing_portal_tree, "City requires exactly six portals", "6 district portals", failures)
 
 	for logistics_id: StringName in LOGISTICS_IDS:
 		var missing_logistics_tree := _load_city_tree(failures)
@@ -242,7 +261,7 @@ func _test_city_policy(failures: Array[String]) -> void:
 	_assert_policy_invalid(policy, wrong_requirement_tree, "Extraction License prerequisites are exact", "field-pack", failures)
 
 	for logistics_id: StringName in LOGISTICS_IDS:
-		for metadata_key: String in ["integrationStatus", "developmentState", "refundPolicy"]:
+		for metadata_key: String in ["activationState", "sourceContentId", "sourceGraphId", "sourcePlacementId", "sourceProjectId"]:
 			var wrong_metadata_tree := _load_city_tree(failures)
 			if wrong_metadata_tree.node(logistics_id) == null:
 				continue
@@ -264,36 +283,39 @@ func _test_default_catalog(failures: Array[String]) -> void:
 	var second := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(second.ok(), "default catalog reloads after caller mutation", failures)
 	if second.ok():
-		TestAssertions.equal(second.tree.nodes.size(), 31, "default catalog does not cache a partial or mutable tree", failures)
+		TestAssertions.equal(second.tree.nodes.size(), 37, "default catalog does not cache a partial or mutable tree", failures)
 		TestAssertions.truthy(first.tree != second.tree, "default catalog returns independent tree definitions", failures)
 
 func _test_catalog_semantic_fail_closed(failures: Array[String]) -> void:
 	var unknown_effect_document := _city_document()
-	var arena_charter := _document_node(unknown_effect_document, "arena-charter")
-	(arena_charter["effects"] as Array)[0]["effectId"] = "unknown_effect"
+	var field_pack := _document_node(unknown_effect_document, "field-pack")
+	(field_pack["effects"] as Array)[0]["definitionId"] = "unknown-effect"
 	_assert_catalog_invalid(unknown_effect_document, "user://task-5-unknown-effect.json", "unknown effect is rejected at catalog boundary", "unknown effect", failures)
 
 	var unknown_requirement_document := _city_document()
 	var extraction_license := _document_node(unknown_requirement_document, "extraction-license")
-	(extraction_license["requirements"] as Array)[0]["requirementId"] = "unknown_requirement"
+	(extraction_license["requirements"] as Array)[0]["definitionId"] = "unknown-requirement"
 	_assert_catalog_invalid(unknown_requirement_document, "user://task-5-unknown-requirement.json", "unknown requirement is rejected at catalog boundary", "unknown requirement", failures)
 
 	var wrong_city_document := _city_document()
-	wrong_city_document["treeId"] = "wrong-city"
-	_assert_catalog_invalid(wrong_city_document, "user://task-5-wrong-city-policy.json", "City policy violation is rejected at catalog boundary", "party-forge-city-v1", failures)
+	(wrong_city_document["extensions"] as Dictionary)["partyForgeDomainTreeId"] = "wrong-city"
+	_assert_catalog_invalid(wrong_city_document, "user://task-5-wrong-city-policy.json", "City identity violation is rejected at catalog boundary", "extensions", failures)
 
 	var connection_cost_document := _city_document()
-	(connection_cost_document["connections"] as Array)[0]["cost"] = 1
+	(((connection_cost_document["graphs"] as Array)[0]["connections"] as Array)[0] as Dictionary)["cost"] = 1
 	_assert_catalog_invalid(connection_cost_document, "user://task-review-connection-cost.json", "unsupported connection cost is rejected at catalog boundary", "PARTY_FORGE_PASSIVE_TREE_ERROR semantic=unsupported_connection_cost", failures)
 
 	var connection_condition_document := _city_document()
-	(connection_condition_document["connections"] as Array)[0]["conditions"] = [{"requirementId": "allocated_node", "operator": "contains", "value": "city-heart", "parameters": {"treeId": "party-forge-city-v1"}}]
+	(((connection_condition_document["graphs"] as Array)[0]["connections"] as Array)[0] as Dictionary)["conditions"] = [{
+		"definitionId": "party-forge-allocated-node",
+		"values": {"node-id": "city-heart", "tree-id": "party-forge-city-v1"},
+	}]
 	_assert_catalog_invalid(connection_condition_document, "user://task-review-connection-condition.json", "unsupported connection conditions are rejected at catalog boundary", "PARTY_FORGE_PASSIVE_TREE_ERROR semantic=unsupported_connection_conditions", failures)
 
 	var default_after_errors := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(default_after_errors.ok(), "semantic errors do not poison the default catalog", failures)
 	if default_after_errors.ok():
-		TestAssertions.equal(default_after_errors.tree.nodes.size(), 31, "catalog caches no partial tree after semantic errors", failures)
+		TestAssertions.equal(default_after_errors.tree.nodes.size(), 37, "catalog caches no partial tree after semantic errors", failures)
 
 func _effect(contract: Array) -> PassiveTreeEffect:
 	return PassiveTreeEffect.new(contract[0], contract[1], contract[2], contract[3])
@@ -312,7 +334,7 @@ func _assert_requirement_invalid(registry: PassiveRequirementRegistry, requireme
 	TestAssertions.truthy(fragment in error, "%s reports %s" % [label, fragment], failures)
 
 func _load_city_tree(failures: Array[String]) -> PassiveTreeDefinition:
-	var result := PassiveTreeLoader.new().load_path(CITY_PATH)
+	var result := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(result.ok(), "City fixture loads for policy mutation", failures)
 	return result.tree
 
@@ -337,7 +359,7 @@ func _city_document() -> Dictionary:
 	return JSON.parse_string(FileAccess.get_file_as_string(CITY_PATH)) as Dictionary
 
 func _document_node(document: Dictionary, node_id: String) -> Dictionary:
-	for node_value: Variant in document["nodes"]:
+	for node_value: Variant in document["content"]:
 		var node_document := node_value as Dictionary
 		if node_document.get("id") == node_id:
 			return node_document

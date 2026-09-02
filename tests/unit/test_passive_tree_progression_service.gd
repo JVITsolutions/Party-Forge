@@ -87,7 +87,7 @@ func _test_extraction_license_requires_both_prerequisites(failures: Array[String
 	TestAssertions.equal(accepted.point_delta, -3, "Extraction License spends its exact cost", failures)
 
 func _test_leader_loadout_extraction_requires_secured_path(failures: Array[String]) -> void:
-	var result := PassiveTreeLoader.new().load_path("res://data/passive_trees/city/party-forge-city.pstree.json")
+	var result := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(result.ok(), "committed City artifact loads for leader extraction allocation", failures)
 	if not result.ok():
 		return
@@ -205,7 +205,7 @@ func _test_refund_rejections_and_precedence(failures: Array[String]) -> void:
 	rejected.implicit_start_nodes.append(&"mutated")
 	TestAssertions.equal(profile.to_dictionary(), profile_before, "rejected refund arrays are defensive from profile input", failures)
 
-	var city_result := PassiveTreeLoader.new().load_path("res://data/passive_trees/city/party-forge-city.pstree.json")
+	var city_result := PassiveTreeCatalog.load_defaults()
 	TestAssertions.truthy(city_result.ok(), "City root refund test loads the committed artifact", failures)
 	if city_result.ok():
 		var city_profile := _profile(city_result.tree.id, true, [&"city-heart"], 0)

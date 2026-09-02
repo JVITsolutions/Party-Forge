@@ -16,10 +16,12 @@ func validate(tree: PassiveTreeDefinition) -> Array[String]:
 		errors.append("%s field=treeId reason=City tree ID must equal party-forge-city-v1" % ERROR_PREFIX)
 	if tree.starting_node_ids != [&"city-heart"]:
 		errors.append("%s field=startingNodeIds reason=City tree must have exactly one starting node city-heart" % ERROR_PREFIX)
-	if tree.nodes.size() != 31:
-		errors.append("%s field=nodes reason=City tree must contain exactly 31 nodes" % ERROR_PREFIX)
-	if tree.connections.size() != 31:
-		errors.append("%s field=connections reason=City tree must contain exactly 31 connections" % ERROR_PREFIX)
+	if tree.nodes.size() != 37:
+		errors.append("%s field=nodes reason=City tree must contain exactly 37 nodes" % ERROR_PREFIX)
+	if tree.connections.size() != 37:
+		errors.append("%s field=connections reason=City tree must contain exactly 37 connections" % ERROR_PREFIX)
+	if tree.portals.size() != 6:
+		errors.append("%s field=portals reason=City tree must contain exactly 6 district portals" % ERROR_PREFIX)
 	var nodes_by_id: Dictionary = {}
 	for tree_node: PassiveTreeNode in tree.nodes:
 		nodes_by_id[tree_node.id] = tree_node
@@ -37,10 +39,14 @@ func validate(tree: PassiveTreeDefinition) -> Array[String]:
 
 func _validate_metadata(tree_node: PassiveTreeNode, errors: Array[String]) -> void:
 	var expected := {
-		"integrationStatus": "future-contract",
-		"developmentState": "coming-soon",
-		"refundPolicy": "permanent",
+		"activationState": "implemented",
+		"sourceContentId": String(tree_node.id),
+		"sourceGraphId": "city-passive-tree",
+		"sourcePlacementId": String(tree_node.id),
+		"sourceProjectId": "party-forge-city",
 	}
+	if tree_node.metadata.size() != expected.size():
+		errors.append("%s node=%s field=metadata reason=metadata must contain exactly activation and source provenance" % [ERROR_PREFIX, tree_node.id])
 	for key: String in expected:
 		if tree_node.metadata.get(key) != expected[key]:
 			errors.append("%s node=%s field=%s reason=%s must equal %s" % [ERROR_PREFIX, tree_node.id, key, key, expected[key]])

@@ -2,7 +2,7 @@ extends SceneTree
 
 const RUNTIME_PATH := "res://design/progression/latticewright/party-forge-city-access.pstree.json"
 const SNAPSHOT_PATH := "res://data/world/access/party-forge-city-access.snapshot.json"
-const LEGACY_CITY_PATH := "res://data/passive_trees/city/party-forge-city.pstree.json"
+const CITY_TREE_PATH := "res://data/passive_trees/city/party-forge-city.pstree.json"
 const MAX_SOURCE_BYTES := 64 * 1024 * 1024
 
 const LOCATIONS: Array[StringName] = [
@@ -367,10 +367,10 @@ func _fixture_location(location_id: StringName, destination_id: StringName, stat
 
 
 func _assert_legacy_city_data(failures: Array[String]) -> void:
-	_assert(FileAccess.file_exists(LEGACY_CITY_PATH), "format-1 City data remains present", failures)
-	if FileAccess.file_exists(LEGACY_CITY_PATH):
-		var legacy_result := PassiveTreeLoader.new().load_path(LEGACY_CITY_PATH)
-		_assert(legacy_result.ok(), "format-1 City data remains loadable by PassiveTreeLoader", failures)
+	_assert(FileAccess.file_exists(CITY_TREE_PATH), "format-3 City data remains present", failures)
+	if FileAccess.file_exists(CITY_TREE_PATH):
+		var city_result := PassiveTreeCatalog.load_defaults()
+		_assert(city_result.ok(), "format-3 City data remains loadable by PassiveTreeCatalog", failures)
 
 
 func _scenarios() -> Array[Dictionary]:

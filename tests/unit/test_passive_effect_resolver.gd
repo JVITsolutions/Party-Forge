@@ -13,9 +13,11 @@ func run() -> Array[String]:
 	return failures
 
 func _test_city_numeric_aggregation_is_deterministic(failures: Array[String]) -> void:
-	var tree := _city_tree(failures)
-	if tree == null:
-		return
+	var tree := _tree_with_nodes([
+		_node(&"shared-lessons-1", [PassiveTreeEffect.new(&"experience_gain", &"add_percent", 2, {"scope": "all_run_experience"})]),
+		_node(&"shared-lessons-2", [PassiveTreeEffect.new(&"experience_gain", &"add_percent", 2, {"scope": "all_run_experience"})]),
+		_node(&"expanded-barracks", [PassiveTreeEffect.new(&"party_capacity", &"add_flat", 1, {"scope": "profile"})]),
+	])
 	var allocations: Array[StringName] = [
 		&"expanded-barracks", &"shared-lessons-2", &"shared-lessons-1", &"shared-lessons-2",
 	]
@@ -48,7 +50,7 @@ func _test_stash_future_contract_projection_is_defensive(failures: Array[String]
 	for effect: PassiveTreeEffect in tree.node(&"stash-access").effects:
 		stash_effect_ids.append(effect.effect_id)
 	var profile := ProfileState.new()
-	var resolution := PassiveEffectResolver.new(PassiveEffectRegistry.new()).resolve(tree, [&"stash-access"])
+	var resolution := PassiveEffectResolver.new(PassiveEffectRegistry.new()).resolve(tree, [&"stash-access", &"logistics-district-charter"])
 
 	TestAssertions.equal(resolution.permanent_unlock_ids(), [&"stash"], "Stash Access grants the exact permanent unlock", failures)
 	TestAssertions.equal(resolution.building_discoveries(), [&"warehouse"], "Stash Access discovers the warehouse", failures)
@@ -74,9 +76,12 @@ func _test_stash_future_contract_projection_is_defensive(failures: Array[String]
 	TestAssertions.equal(resolution.stash_tab_contracts()[0]["count"], 1, "stash contract accessor is deeply defensive", failures)
 
 func _test_exact_unlock_ids_and_future_states(failures: Array[String]) -> void:
-	var tree := _city_tree(failures)
-	if tree == null:
-		return
+	var tree := _tree_with_nodes([
+		_node(&"north-road-charter", [PassiveTreeEffect.new(&"region_unlock", &"set", true, {"regionId": "north-road"})]),
+		_node(&"artificers-hall", [PassiveTreeEffect.new(&"city_service_unlock", &"set", true, {"serviceId": "crafting"})]),
+		_node(&"equipment-registry", [PassiveTreeEffect.new(&"feature_unlock", &"set", true, {"featureId": "equipment_inventory"})]),
+		_node(&"arena-charter", [PassiveTreeEffect.new(&"mode_unlock", &"set", true, {"modeId": "battle"})]),
+	])
 	var resolution := PassiveEffectResolver.new(PassiveEffectRegistry.new()).resolve(tree, [
 		&"north-road-charter", &"artificers-hall", &"equipment-registry", &"arena-charter",
 	])
