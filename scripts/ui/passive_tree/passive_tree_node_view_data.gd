@@ -20,6 +20,8 @@ var decision_code: StringName
 var decision_message: String
 var refund_policy_text: String
 var development_lines: Array[String] = []
+var activation_state: StringName
+var activation_ready := false
 
 func _init(
 	p_id: StringName = &"",
@@ -41,6 +43,8 @@ func _init(
 	p_decision_message: String = "",
 	p_refund_policy_text: String = "",
 	p_development_lines: Array[String] = [],
+	p_activation_state: StringName = &"",
+	p_activation_ready: bool = false,
 ) -> void:
 	id = p_id
 	position = p_position
@@ -61,6 +65,8 @@ func _init(
 	decision_message = p_decision_message
 	refund_policy_text = p_refund_policy_text
 	development_lines.assign(p_development_lines)
+	activation_state = p_activation_state
+	activation_ready = p_activation_ready
 
 func copy() -> PassiveTreeNodeViewData:
 	return PassiveTreeNodeViewData.new(
@@ -83,6 +89,8 @@ func copy() -> PassiveTreeNodeViewData:
 		decision_message,
 		refund_policy_text,
 		development_lines,
+		activation_state,
+		activation_ready,
 	)
 
 static func value_only_copy(value: Variant) -> Variant:

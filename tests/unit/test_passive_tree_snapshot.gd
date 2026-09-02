@@ -4,6 +4,7 @@ func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_reconciles_known_and_unknown_without_mutation(failures)
 	_test_implicit_start_and_visibility_radius(failures)
+	_test_discovered_city_reveals_every_authored_node(failures)
 	_test_developer_reveal_is_view_only(failures)
 	return failures
 
@@ -56,6 +57,20 @@ func _test_developer_reveal_is_view_only(failures: Array[String]) -> void:
 	TestAssertions.equal(snapshot.visible, [&"city-heart", &"field-pack", &"fourth-ring", &"market", &"third-ring"], "Developer reveal exposes every node in sorted order", failures)
 	TestAssertions.equal(profile.to_dictionary(), profile_before, "Developer reveal never persists visibility or allocations", failures)
 	TestAssertions.equal(profile.tree_visibility_progress[String(tree.id)], 0, "Developer reveal leaves visibility progress unchanged", failures)
+
+func _test_discovered_city_reveals_every_authored_node(failures: Array[String]) -> void:
+	var result := PassiveTreeCatalog.load_defaults()
+	TestAssertions.truthy(result.ok(), "committed City tree loads for full authored reveal", failures)
+	if not result.ok():
+		return
+	var profile := _discovered_profile(result.tree.id)
+	profile.tree_visibility_progress[String(result.tree.id)] = -100
+	var before := profile.to_dictionary()
+	var snapshot := PassiveTreeSnapshot.build(result.tree, profile, false)
+	TestAssertions.equal(snapshot.visible.size(), 37, "discovered City reveals all 37 authored nodes regardless of legacy visibility progress", failures)
+	for tree_node: PassiveTreeNode in result.tree.nodes:
+		TestAssertions.truthy(tree_node.id in snapshot.visible, "discovered City reveals %s" % tree_node.id, failures)
+	TestAssertions.equal(profile.to_dictionary(), before, "full City reveal is a pure projection", failures)
 
 func _discovered_profile(tree_id: StringName) -> ProfileState:
 	var profile := ProfileState.new_profile("profile-12345678", "Graph Tester", 1000)

@@ -348,7 +348,7 @@ func _confirm_action() -> void:
 	var transaction_id := "passive-tree-screen-%s-%s-%d-%d" % [profile.profile_id, action, Time.get_ticks_usec(), _transaction_serial]
 	var result: ProfileMutationResult
 	if action == "allocate":
-		result = _mutations.allocate(profile.profile_id, transaction_id, _tree_definition, node_id, _developer_context, _profile_root)
+		result = _mutations.allocate(profile.profile_id, transaction_id, _tree_definition, node_id, false, _profile_root)
 	else:
 		var has_respec_service := RESPEC_SERVICE_ID in profile.permanent_feature_unlocks
 		result = _mutations.refund(profile.profile_id, transaction_id, _tree_definition, node_id, _developer_context, has_respec_service, _profile_root)

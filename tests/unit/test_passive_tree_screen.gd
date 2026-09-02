@@ -8,6 +8,26 @@ const CANVAS_SCRIPT_PATH := "res://scripts/ui/passive_tree/passive_tree_canvas.g
 
 var _root_counter := 0
 
+class RecordingPassiveTreeMutations extends PassiveTreeMutationService:
+	var allocation_authorities: Array[bool] = []
+
+	func _init() -> void:
+		var effects := PassiveEffectRegistry.new()
+		super(ProfileMutationService.new(ProfileStore.new()), PassiveTreeProgressionService.new(effects, PassiveRequirementRegistry.new()), PassiveEffectResolver.new(effects))
+
+	func allocate(
+		_profile_id: String,
+		_transaction_id: String,
+		_tree: PassiveTreeDefinition,
+		_node_id: StringName,
+		developer_context: bool,
+		_root: String = ProfileStore.DEFAULT_ROOT,
+	) -> ProfileMutationResult:
+		allocation_authorities.append(developer_context)
+		var result := ProfileMutationResult.new()
+		result.error = "INJECTED_PLAYER_AUTHORITY_PROBE"
+		return result
+
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
@@ -21,6 +41,7 @@ func run() -> Array[String]:
 	_test_visible_detail_disclosures_and_permanent_styling(failures)
 	_test_lifecycle_pause_ownership_and_focus(failures)
 	_test_confirmation_real_mutation_refresh_and_errors(failures)
+	_test_developer_preview_commits_with_player_authority(failures)
 	_test_confirmation_captures_allocation_and_refund_targets(failures)
 	_test_confirmation_invalidation_and_clear_contract(failures)
 	_test_keyboard_controller_actions_and_modal_block(failures)
@@ -152,7 +173,7 @@ func _test_visible_detail_disclosures_and_permanent_styling(failures: Array[Stri
 	TestAssertions.equal(manager.bootstrap(root), "", "disclosure manager bootstraps", failures)
 	var screen := _configured_screen(tree, manager, _services(store), true, root)
 	var canvas := screen.find_child("Canvas", true, false) as PassiveTreeCanvas
-	canvas.select_node(&"target")
+	canvas.select_node(&"future")
 	var detail := _label(screen, "DetailSections").text
 	TestAssertions.truthy(detail.contains("Cost\n1"), "visible detail renders node cost", failures)
 	TestAssertions.truthy(detail.contains("Refund Policy\nRefundable"), "visible detail renders explicit refundable policy", failures)
@@ -164,9 +185,41 @@ func _test_visible_detail_disclosures_and_permanent_styling(failures: Array[Stri
 	canvas.select_node(&"root")
 	TestAssertions.truthy(_label(screen, "DetailSections").text.contains("Refund Policy\nPermanent"), "permanent detail is accessible without relying on color", failures)
 	var permanent_control := canvas.node_control(&"root") as PassiveTreeNodeControl
-	var ordinary_control := canvas.node_control(&"target") as PassiveTreeNodeControl
+	var ordinary_control := canvas.node_control(&"future") as PassiveTreeNodeControl
 	TestAssertions.truthy(permanent_control.get_theme_color("font_outline_color") != ordinary_control.get_theme_color("font_outline_color"), "permanent node has distinct outline styling", failures)
 	TestAssertions.truthy(permanent_control.tooltip_text.contains("Permanent"), "permanent node tooltip conveys permanence", failures)
+	screen.call(&"close")
+	screen.free()
+	ProfileTestSupport.remove_tree(root)
+
+func _test_developer_preview_commits_with_player_authority(failures: Array[String]) -> void:
+	var root := _case_root("developer_authority")
+	var store := ProfileStore.new()
+	var tree := _mutation_tree()
+	var profile := ProfileState.new_profile("developer-authority", "Developer Authority", 1000)
+	profile.discovered_trees = [String(tree.id)]
+	profile.tree_allocations[String(tree.id)] = ["root"]
+	profile.passive_points_available = 2
+	profile.passive_points_lifetime_earned = 2
+	ProfileTestSupport.remove_tree(root)
+	TestAssertions.equal(store.save_profile(profile, root), "", "Developer authority fixture saves", failures)
+	var manager := ProfileManager.new()
+	TestAssertions.equal(manager.bootstrap(root), "", "Developer authority manager bootstraps", failures)
+	var spy := RecordingPassiveTreeMutations.new()
+	var services := _services(store)
+	var screen := (load(SCREEN_SCENE_PATH) as PackedScene).instantiate()
+	(Engine.get_main_loop() as SceneTree).root.add_child(screen)
+	screen.call(&"_ready")
+	screen.call(&"configure", tree, manager, spy, services["view_model"], true, root)
+	screen.call(&"open")
+	var canvas := screen.find_child("Canvas", true, false)
+	TestAssertions.truthy(canvas.call(&"select_node", &"target"), "Developer preview selects implemented target", failures)
+	TestAssertions.truthy(not _button(screen, "AllocateButton").disabled, "Developer preview exposes allocation affordance", failures)
+	_button(screen, "AllocateButton").pressed.emit()
+	_button(screen, "ConfirmButton").pressed.emit()
+	TestAssertions.equal(spy.allocation_authorities, [false], "Developer Preview always submits Player Mode allocation authority", failures)
+	TestAssertions.equal(_label(screen, "Status").text, "INJECTED_PLAYER_AUTHORITY_PROBE", "authority probe failure stays user-visible", failures)
+	TestAssertions.equal(store.load_profile(profile.profile_id, root).profile.to_dictionary(), profile.to_dictionary(), "authority probe persists no profile mutation", failures)
 	screen.call(&"close")
 	screen.free()
 	ProfileTestSupport.remove_tree(root)
@@ -510,12 +563,14 @@ func _view(id: StringName, position: Vector2, state: StringName = &"allocatable"
 func _mutation_tree() -> PassiveTreeDefinition:
 	var nodes: Array[PassiveTreeNode] = [
 		PassiveTreeNode.new(&"root", &"start", Vector2.ZERO, "Root", "Root description", 0),
-		PassiveTreeNode.new(&"target", &"small", Vector2(140, 0), "Target", "Target description", 1, [], null, [], [], {"integrationStatus": "future-contract"}),
+		PassiveTreeNode.new(&"target", &"small", Vector2(140, 0), "Target", "Target description", 1, [], null, [], [], {"activationState": "implemented"}),
 		PassiveTreeNode.new(&"other", &"small", Vector2(-140, 0), "Other", "Other description", 1),
+		PassiveTreeNode.new(&"future", &"small", Vector2(0, 140), "Future", "Future description", 1, [], null, [], [], {"activationState": "future"}),
 	]
 	var connections: Array[PassiveTreeConnection] = [
 		PassiveTreeConnection.new(&"root-target", &"root", &"target", &"bidirectional"),
 		PassiveTreeConnection.new(&"root-other", &"root", &"other", &"bidirectional"),
+		PassiveTreeConnection.new(&"root-future", &"root", &"future", &"bidirectional"),
 	]
 	var starts: Array[StringName] = [&"root"]
 	return PassiveTreeDefinition.new(&"screen-tree", "Screen Tree", starts, nodes, connections)

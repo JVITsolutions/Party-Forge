@@ -16,14 +16,25 @@ const MESSAGES := {
 	&"retained_path_disconnected": "Refunding this node would disconnect an allocated path.",
 	&"retained_requirement_failed": "Refunding this node would break another allocated node's requirements.",
 	&"unsupported_connection_semantics": "This passive tree uses unsupported connection rules.",
+	&"future_node": PassiveTreeActivationPolicy.FUTURE_MESSAGE,
+	&"district_target_missing": PassiveTreeActivationPolicy.DISTRICT_TARGET_MISSING_MESSAGE,
 }
 
 var _effect_registry: PassiveEffectRegistry
 var _requirement_registry: PassiveRequirementRegistry
+var _activation: PassiveTreeActivationPolicy
+var _portfolio: LatticewrightRuntimePortfolioRegistry
 
-func _init(effect_registry: PassiveEffectRegistry, requirement_registry: PassiveRequirementRegistry) -> void:
+func _init(
+	effect_registry: PassiveEffectRegistry,
+	requirement_registry: PassiveRequirementRegistry,
+	activation: PassiveTreeActivationPolicy = null,
+	portfolio: LatticewrightRuntimePortfolioRegistry = null,
+) -> void:
 	_effect_registry = effect_registry
 	_requirement_registry = requirement_registry
+	_activation = activation if activation != null else PassiveTreeActivationPolicy.new()
+	_portfolio = portfolio if portfolio != null else LatticewrightRuntimePortfolioRegistry.new()
 
 func allocation_decision(
 	tree: PassiveTreeDefinition,
@@ -43,6 +54,9 @@ func allocation_decision(
 		return _decision(&"unknown_node", false, 0, current, snapshot.implicit_start_nodes)
 	if node_id in snapshot.allocated:
 		return _decision(&"already_allocated", false, 0, current, snapshot.implicit_start_nodes)
+	var activation := activation_decision(tree, tree_node)
+	if not activation.ok():
+		return _decision(activation.code, false, 0, current, snapshot.implicit_start_nodes, activation.message)
 	if node_id not in snapshot.visible:
 		return _decision(&"node_obscured", false, 0, current, snapshot.implicit_start_nodes)
 	var validation_allocations := _combined_ids(snapshot.allocated, snapshot.implicit_start_nodes)
@@ -55,6 +69,9 @@ func allocation_decision(
 	var projected := _combined_ids(current, snapshot.implicit_start_nodes)
 	projected = _combined_ids(projected, [node_id])
 	return _decision(&"ok", true, -tree_node.cost, projected, snapshot.implicit_start_nodes)
+
+func activation_decision(tree: PassiveTreeDefinition, tree_node: PassiveTreeNode) -> PassiveTreeActionDecision:
+	return _activation.decision(tree, tree_node, _portfolio)
 
 func refund_decision(
 	tree: PassiveTreeDefinition,
@@ -166,5 +183,7 @@ func _decision(
 	point_delta: int,
 	next_allocations: Array[StringName],
 	implicit_start_nodes: Array[StringName],
+	message_override: String = "",
 ) -> PassiveTreeActionDecision:
-	return PassiveTreeActionDecision.new(allowed, code, MESSAGES[code], point_delta, next_allocations, implicit_start_nodes)
+	var message := message_override if not message_override.is_empty() else String(MESSAGES[code])
+	return PassiveTreeActionDecision.new(allowed, code, message, point_delta, next_allocations, implicit_start_nodes)

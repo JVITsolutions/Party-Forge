@@ -15,6 +15,7 @@ func run() -> Array[String]:
 	_test_duplicate_replays_identical_result(failures)
 	_test_request_fingerprint_conflicts_are_atomic(failures)
 	_test_allocation_rejections_are_atomic(failures)
+	_test_activation_rejections_are_atomic_and_live(failures)
 	_test_failed_save_is_atomic(failures)
 	_test_stash_projects_permanent_discoveries_and_storage(failures)
 	_test_reconciliation_failure_aborts_permanent_allocation(failures)
@@ -129,6 +130,60 @@ func _test_allocation_rejections_are_atomic(failures: Array[String]) -> void:
 			TestAssertions.truthy(not after.applied_transactions.has(test_case["transaction"]), "%s records no transaction" % test_case["label"], failures)
 		ProfileTestSupport.remove_tree(root)
 
+func _test_activation_rejections_are_atomic_and_live(failures: Array[String]) -> void:
+	var future_tree := _activation_tree(&"future")
+	var future_root := _case_root("future_activation")
+	var future_store := ProfileStore.new()
+	_save_fixture(future_store, _profile(future_tree.id, ["city-heart"], 1), future_root, "future activation fixture", failures)
+	var future_path := future_store.profile_path(ID, future_root)
+	var future_bytes := FileAccess.get_file_as_bytes(future_path)
+	var future_before := future_store.load_profile(ID, future_root).profile.to_dictionary()
+	var future_service := _service(future_store)
+	for developer_context: bool in [false, true]:
+		var suffix := "developer" if developer_context else "player"
+		var rejected := future_service.allocate(ID, "future-%s" % suffix, future_tree, &"district-charter", developer_context, future_root)
+		TestAssertions.equal(rejected.error, PassiveTreeProgressionService.MESSAGES[&"future_node"], "%s allocation surfaces authored future state" % suffix, failures)
+		TestAssertions.equal(future_store.load_profile(ID, future_root).profile.to_dictionary(), future_before, "%s future rejection preserves points allocations timestamps and transaction ledger" % suffix, failures)
+		TestAssertions.equal(FileAccess.get_file_as_bytes(future_path), future_bytes, "%s future rejection preserves exact profile bytes" % suffix, failures)
+	ProfileTestSupport.remove_tree(future_root)
+
+	var missing_tree := _activation_tree(&"portal-gated")
+	var missing_root := _case_root("portal_missing")
+	var missing_store := ProfileStore.new()
+	_save_fixture(missing_store, _profile(missing_tree.id, ["city-heart"], 1), missing_root, "missing portal fixture", failures)
+	var missing_before := missing_store.load_profile(ID, missing_root).profile.to_dictionary()
+	var missing := _service(missing_store).allocate(ID, "portal-missing", missing_tree, &"district-charter", false, missing_root)
+	TestAssertions.equal(missing.error, PassiveTreeProgressionService.MESSAGES[&"district_target_missing"], "missing portal target rejects at commit time", failures)
+	TestAssertions.equal(missing_store.load_profile(ID, missing_root).profile.to_dictionary(), missing_before, "missing portal rejection is atomic", failures)
+	ProfileTestSupport.remove_tree(missing_root)
+
+	var exact_portfolio := LatticewrightRuntimePortfolioRegistry.new()
+	TestAssertions.equal(exact_portfolio.register_runtime(_runtime(&"district-project", &"district-graph")), "", "exact mutation portal fixture registers", failures)
+	var exact_root := _case_root("portal_exact")
+	var exact_store := ProfileStore.new()
+	_save_fixture(exact_store, _profile(missing_tree.id, ["city-heart"], 1), exact_root, "exact portal fixture", failures)
+	var exact := _service(exact_store, null, exact_portfolio).allocate(ID, "portal-exact", missing_tree, &"district-charter", false, exact_root)
+	var exact_saved := exact_store.load_profile(ID, exact_root).profile
+	TestAssertions.truthy(exact.ok(), "exact live portal target authorizes commit", failures)
+	TestAssertions.equal(exact_saved.passive_points_available, 0, "exact portal allocation spends one point", failures)
+	TestAssertions.equal(exact_saved.tree_allocations[String(missing_tree.id)], ["city-heart", "district-charter"], "exact portal allocation persists canonically", failures)
+	ProfileTestSupport.remove_tree(exact_root)
+
+	var live_portfolio := LatticewrightRuntimePortfolioRegistry.new()
+	TestAssertions.equal(live_portfolio.register_runtime(_runtime(&"district-project", &"district-graph")), "", "live unregister fixture registers", failures)
+	var live_root := _case_root("portal_unregister")
+	var live_store := ProfileStore.new()
+	_save_fixture(live_store, _profile(missing_tree.id, ["city-heart"], 1), live_root, "live unregister fixture", failures)
+	var progression := PassiveTreeProgressionService.new(PassiveEffectRegistry.new(), PassiveRequirementRegistry.new(), PassiveTreeActivationPolicy.new(), live_portfolio)
+	var mutation := PassiveTreeMutationService.new(ProfileMutationService.new(live_store), progression, PassiveEffectResolver.new(PassiveEffectRegistry.new()))
+	TestAssertions.truthy(progression.allocation_decision(missing_tree, live_store.load_profile(ID, live_root).profile, &"district-charter", false).ok(), "portal is ready during view-time preflight", failures)
+	var live_before := live_store.load_profile(ID, live_root).profile.to_dictionary()
+	live_portfolio.unregister_runtime(&"district-project")
+	var unregistered := mutation.allocate(ID, "portal-unregistered", missing_tree, &"district-charter", false, live_root)
+	TestAssertions.equal(unregistered.error, PassiveTreeProgressionService.MESSAGES[&"district_target_missing"], "commit rechecks target after view-time unregister", failures)
+	TestAssertions.equal(live_store.load_profile(ID, live_root).profile.to_dictionary(), live_before, "target unregister rejection preserves the complete profile", failures)
+	ProfileTestSupport.remove_tree(live_root)
+
 func _test_failed_save_is_atomic(failures: Array[String]) -> void:
 	var tree := _city_tree(failures)
 	if tree == null:
@@ -162,9 +217,9 @@ func _test_stash_projects_permanent_discoveries_and_storage(failures: Array[Stri
 	var saved := store.load_profile(ID, root).profile
 	TestAssertions.truthy(result.ok(), "Stash Access allocation commits", failures)
 	TestAssertions.equal(saved.passive_points_available, 4, "Stash Access charges its exact cost", failures)
-	TestAssertions.equal(saved.permanent_feature_unlocks, ["legacy", "run_history", "stash"], "permanent unlocks merge monotonically in unique lexical form", failures)
+	TestAssertions.equal(saved.permanent_feature_unlocks, ["legacy", "stash"], "permanent unlocks merge monotonically in unique lexical form", failures)
 	TestAssertions.equal(saved.discovered_buildings, ["forge", "warehouse"], "building discoveries merge monotonically in unique lexical form", failures)
-	TestAssertions.equal(saved.discovered_trees, ["party-forge-city-v1", "party-forge-warehouse-v1", "zeta-tree"], "tree discoveries merge monotonically in unique lexical form", failures)
+	TestAssertions.equal(saved.discovered_trees, ["party-forge-city-v1", "zeta-tree"], "Stash Access no longer invents Warehouse tree discovery", failures)
 	TestAssertions.equal(saved.stash_tabs.size(), 1, "Stash Access materializes one persistent stash tab", failures)
 	TestAssertions.equal(saved.stash_tabs[0], ItemSlotContainer.create(&"stash-tab-000", ItemSlotContainer.PROFILE_STASH_TAB, ID, 100).to_dictionary(), "permanent allocation materializes the exact stash tab contract", failures)
 	ProfileTestSupport.remove_tree(root)
@@ -198,11 +253,11 @@ func _test_unresolved_allocations_round_trip_without_effects(failures: Array[Str
 	var store := ProfileStore.new()
 	_save_fixture(store, _profile(tree.id, ["removed-passive", "city-heart", "removed-passive"], 2), root, "unresolved fixture", failures)
 
-	var result := _service(store).allocate(ID, "allocate-with-unresolved", tree, &"shared-lessons-1", false, root)
+	var result := _service(store).allocate(ID, "allocate-with-unresolved", tree, &"equipment-registry", false, root)
 	var saved := store.load_profile(ID, root).profile
 	TestAssertions.truthy(result.ok(), "known allocation commits beside unresolved saved IDs", failures)
-	TestAssertions.equal(saved.tree_allocations["party-forge-city-v1"], ["city-heart", "removed-passive", "shared-lessons-1"], "unresolved IDs remain in the pure decision projection", failures)
-	TestAssertions.equal(saved.permanent_feature_unlocks, [], "unresolved IDs never grant permanent effects", failures)
+	TestAssertions.equal(saved.tree_allocations["party-forge-city-v1"], ["city-heart", "equipment-registry", "removed-passive"], "unresolved IDs remain in the pure decision projection", failures)
+	TestAssertions.equal(saved.permanent_feature_unlocks, ["equipment_inventory"], "only the known implemented allocation grants its permanent effect", failures)
 	TestAssertions.equal(saved.discovered_buildings, [], "unresolved IDs never grant building effects", failures)
 	TestAssertions.equal(saved.discovered_trees, ["party-forge-city-v1"], "unresolved IDs never grant tree effects", failures)
 	ProfileTestSupport.remove_tree(root)
@@ -300,9 +355,13 @@ func _test_retained_failures_leave_every_projection_unchanged(failures: Array[St
 		TestAssertions.truthy(not after.applied_transactions.has("refund-%s" % test_case["label"]), "%s records no transaction" % test_case["label"], failures)
 		ProfileTestSupport.remove_tree(root)
 
-func _service(store: ProfileStore, reconciler: ProfileStorageReconciler = null) -> PassiveTreeMutationService:
+func _service(
+	store: ProfileStore,
+	reconciler: ProfileStorageReconciler = null,
+	portfolio: LatticewrightRuntimePortfolioRegistry = null,
+) -> PassiveTreeMutationService:
 	var mutations := ProfileMutationService.new(store)
-	var progression := PassiveTreeProgressionService.new(PassiveEffectRegistry.new(), PassiveRequirementRegistry.new())
+	var progression := PassiveTreeProgressionService.new(PassiveEffectRegistry.new(), PassiveRequirementRegistry.new(), PassiveTreeActivationPolicy.new(), portfolio)
 	var resolver := PassiveEffectResolver.new(PassiveEffectRegistry.new())
 	if reconciler == null:
 		return PassiveTreeMutationService.new(mutations, progression, resolver)
@@ -377,3 +436,30 @@ func _retained_requirement_tree() -> PassiveTreeDefinition:
 	]
 	var starts: Array[StringName] = [&"city-heart"]
 	return PassiveTreeDefinition.new(&"task9-retained-requirement", "Retained Requirement", starts, nodes, connections)
+
+func _activation_tree(state: StringName) -> PassiveTreeDefinition:
+	var nodes: Array[PassiveTreeNode] = [
+		PassiveTreeNode.new(&"city-heart", &"start", Vector2.ZERO, "City Heart", "", 0, [], null, [], [], {"activationState": "implemented"}),
+		PassiveTreeNode.new(&"district-charter", &"small", Vector2(100, 0), "District Charter", "", 1, [], null, [], [], {"activationState": String(state)}),
+	]
+	var connections: Array[PassiveTreeConnection] = [PassiveTreeConnection.new(&"heart-charter", &"city-heart", &"district-charter", &"bidirectional")]
+	var portals: Array[PassiveTreePortal] = []
+	if state == &"portal-gated":
+		portals.append(PassiveTreePortal.new(&"city-to-district", &"district-charter", "District", &"drill-down", &"district-project", &"district-graph", &"district-tree"))
+	return PassiveTreeDefinition.new(&"party-forge-city-v1", "Activation Test City", [&"city-heart"], nodes, connections, {}, portals)
+
+func _runtime(project_id: StringName, graph_id: StringName) -> Dictionary:
+	return {
+		"format": "latticewright-progression",
+		"formatVersion": 3,
+		"projectId": String(project_id),
+		"name": "District Runtime",
+		"archetype": "passive-tree",
+		"vocabulary": {},
+		"schemas": {},
+		"content": [],
+		"graphs": [{"id": String(graph_id)}],
+		"graphPortals": [],
+		"assets": [],
+		"extensions": {},
+	}

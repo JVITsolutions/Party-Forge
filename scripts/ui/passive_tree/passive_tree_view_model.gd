@@ -99,6 +99,7 @@ func _project_node(
 		)
 
 	var is_allocated := tree_node.id in snapshot.allocated or tree_node.id in snapshot.implicit_start_nodes
+	var activation := _progression.activation_decision(tree, tree_node)
 	var decision_code: StringName = &"already_allocated"
 	var decision_message := String(PassiveTreeProgressionService.MESSAGES[decision_code])
 	var is_allocatable := false
@@ -131,10 +132,11 @@ func _project_node(
 	keyword_lines.sort()
 	var permanent := _is_permanent(tree, tree_node)
 	var development_lines: Array[String] = []
-	if tree_node.metadata.get("integrationStatus", "") == "future-contract":
-		development_lines.append("Coming Soon")
-		if developer_reveal:
-			development_lines.append("Developer Preview")
+	match activation.code:
+		&"future_node", &"district_target_missing":
+			development_lines.append(activation.message)
+	if developer_reveal and activation.code in [&"future_node", &"district_target_missing"]:
+		development_lines.append("Developer Preview")
 
 	return PassiveTreeNodeViewData.new(
 		tree_node.id,
@@ -156,6 +158,8 @@ func _project_node(
 		decision_message,
 		"Permanent" if permanent else "Refundable",
 		development_lines,
+		StringName(tree_node.metadata.get("activationState", "")),
+		activation.ok(),
 	)
 
 func _is_permanent(tree: PassiveTreeDefinition, tree_node: PassiveTreeNode) -> bool:
