@@ -125,7 +125,7 @@ func _run() -> void:
 			_assert(not label.text.strip_edges().is_empty(), "%s text remains readable at %dx%d" % [label.name, window_size.x, window_size.y])
 			_assert_readable(label, 18, effective_scale.y, window_size)
 		_assert(active_profile.text == "Active Profile: Warehouse Activation", "active-profile text is exact at %dx%d" % [window_size.x, window_size.y])
-		_assert(status.text == "Ready for your next run.", "status text is exact at %dx%d" % [window_size.x, window_size.y])
+		_assert(status.text == "Begin your journey.", "status text is exact at %dx%d" % [window_size.x, window_size.y])
 		for action: Button in actions:
 			_assert(action.visible and not action.disabled, "%s remains available at %dx%d" % [action.name, window_size.x, window_size.y])
 			_assert_contained(logical_rect, action, action.name, window_size)
