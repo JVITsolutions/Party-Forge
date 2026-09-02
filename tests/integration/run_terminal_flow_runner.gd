@@ -654,7 +654,7 @@ func _test_victory_defeat_recap_and_finalize_retention() -> void:
 		_assert(not durable.terminal_resolution.is_empty(), "%s finalized recap retains its durable receipt until an action" % label)
 		var city_allocations: Array = durable.tree_allocations.get(CITY_TREE_ID, [])
 		if outcome == RunTerminalSnapshot.Outcome.VICTORY:
-			_assert(durable.passive_points_available == 1 and durable.passive_points_lifetime_earned == 1, "victory terminal integration grants exactly one passive point")
+			_assert(durable.passive_points_available == 0 and durable.passive_points_lifetime_earned == 0, "first-victory terminal integration reveals City without granting a passive point")
 			_assert(durable.discovered_trees.count(CITY_TREE_ID) == 1, "victory terminal integration reveals City exactly once")
 			_assert(city_allocations.count(CITY_ROOT_NODE_ID) == 1, "victory terminal integration seeds City Heart exactly once")
 		else:

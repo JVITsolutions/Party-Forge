@@ -45,15 +45,15 @@ func _run() -> void:
 	var passive_mutations := services["mutations"] as PassiveTreeMutationService
 
 	var victory := ProfileTestSupport.commit_city_victory(profile_id, "profile-runner-first-victory", _profile_root)
-	_assert(victory.ok(), "first-victory fixture commits City discovery and its first point")
+	_assert(victory.ok(), "first-victory fixture commits City discovery without a point")
 	_assert(victory.profile.prologue_state == ProfileState.PrologueState.NOT_STARTED, "first victory leaves the separate prologue lifecycle unchanged")
 	_assert(TREE_ID in victory.profile.discovered_trees, "City tree discovery is persisted")
 	_assert(ROOT_NODE_ID in victory.profile.tree_allocations.get(TREE_ID, []), "City starting node is persisted")
 	_assert(manager.refresh_profile(profile_id).is_empty(), "manager refreshes after City discovery")
 
-	var grant := profile_mutations.grant_passive_points(profile_id, "profile-runner-grant-points", 5, _profile_root)
+	var grant := profile_mutations.grant_passive_points(profile_id, "profile-runner-grant-points", 6, _profile_root)
 	_assert(grant.ok(), "additional Passive Points are granted only through grant_passive_points")
-	_assert(grant.profile.passive_points_available == 6, "first-victory reward plus granted points fund the exact paid route")
+	_assert(grant.profile.passive_points_available == 6, "granted points fund the exact paid route after the point-free first victory")
 	_assert(grant.profile.passive_points_lifetime_earned == 6, "lifetime Passive Points track the production grants")
 	_assert(manager.refresh_profile(profile_id).is_empty(), "manager refreshes after the point grant")
 

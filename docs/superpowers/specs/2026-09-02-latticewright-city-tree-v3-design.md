@@ -325,8 +325,8 @@ The seven non-charter nodes in this diagram are immediately implemented. Logisti
 ## Player Mode City discovery and passive-point rewards
 
 - **Approved decision:** Player Mode reveals and activates the City passive tree when the selected profile commits its first victory.
-- **Approved decision:** the first committed victory also grants 1 passive point.
-- **Approved decision:** every later unique committed victory grants 1 additional passive point.
+- **Approved decision:** the first committed victory grants no passive point; it only reveals City and seeds the free City Heart root.
+- **Approved decision:** every later unique committed victory grants 1 passive point.
 - **Approved decision:** this is temporary progression until a later design replaces it.
 
 ### Atomic victory transaction
@@ -337,16 +337,16 @@ For a terminal snapshot whose outcome is `VICTORY`, the transaction atomically:
 
 1. adds `party-forge-city-v1` to `discovered_trees` if absent;
 2. ensures `city-heart` is present in `tree_allocations["party-forge-city-v1"]` without charging a point;
-3. increments `passive_points_available` by 1; and
-4. increments `passive_points_lifetime_earned` by 1.
+3. if City was already discovered when the transaction began, increments `passive_points_available` by 1; and
+4. under the same condition, increments `passive_points_lifetime_earned` by 1.
 
 For `DEFEAT`, abandonment, or any non-victory terminal outcome, none of those fields changes.
 
 The existing terminal transaction identity derived from stable `run_id` is the idempotency key. Resolution replay, recovery replay, repeated signals, result reconstruction, or application restart cannot award a second point for the same run. No second victory ledger is introduced.
 
-If the City is already discovered, the victory still grants exactly one point. If an older profile has City discovery but is missing City Heart, the same transaction repairs the free root and grants only the normal one point. Existing untyped `run_history` entries do not trigger retroactive points.
+The first victory therefore reveals City and seeds City Heart at zero points. If the City is already discovered, each later unique victory grants exactly one point. If an older profile has City discovery but is missing City Heart, the same transaction repairs the free root and grants only the normal subsequent-victory point. Existing untyped `run_history` entries do not trigger retroactive points.
 
-Point overflow, invalid City identity, malformed existing allocations, or a failed profile save rejects the complete resolution mutation. Extraction, discovery, root allocation, and point award cannot commit partially. The durable terminal recovery record remains the retry authority.
+Point overflow on a subsequent victory, invalid City identity, malformed existing allocations, or a failed profile save rejects the complete resolution mutation. Extraction, discovery, root allocation, and any point award cannot commit partially. The durable terminal recovery record remains the retry authority.
 
 Once discovered, all 37 City placements are visible. Existing `tree_visibility_progress` data is preserved for compatibility but is not a second readiness or City-layout authority.
 
@@ -504,7 +504,7 @@ This sequencing maps every unimplemented City node without inventing its final n
 7. Future nodes are visible but cannot charge a point. Charters additionally require a valid registered target.
 8. Stash Access connects directly to City Heart. Civic Archive is optional. Extraction License still requires both Field Pack and Stash Access.
 9. Stash Access no longer discovers the Warehouse tree; Logistics District Charter owns that discovery.
-10. A profile's first committed victory reveals the City, seeds City Heart, and grants 1 passive point exactly once.
+10. A profile's first committed victory reveals the City and seeds City Heart without granting a passive point.
 11. Every later unique committed victory grants exactly 1 point; defeat and abandonment grant none.
 12. Player Mode produces no item drop until `equipment_inventory`, `inventory`, and positive run-inventory capacity all pass.
 13. Existing profiles retain allocations and permanent progression without silent deletion, revocation, or automatic refund.

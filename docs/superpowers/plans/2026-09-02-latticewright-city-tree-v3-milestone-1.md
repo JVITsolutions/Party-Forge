@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace Party Forge's obsolete format-1 City-tree data path with the approved 37-node LatticeWright runtime-v3 tree, make every presently implemented node safely allocatable, award City access and one passive point per unique victory, and prevent Player Mode item drops until both item features and positive run-inventory capacity are available.
+**Goal:** Replace Party Forge's obsolete format-1 City-tree data path with the approved 37-node LatticeWright runtime-v3 tree, make every presently implemented node safely allocatable, reveal City on the first victory and award one passive point per subsequent unique victory, and prevent Player Mode item drops until both item features and positive run-inventory capacity are available.
 
 **Architecture:** LatticeWright remains the sole editable City-tree source and exports deterministic runtime-v3 JSON. Party Forge strictly reads that envelope, selects a versioned adapter, and projects it into the existing stable passive-tree domain. A portfolio registry supplies live portal-target health to one activation policy used by both presentation and commit-time mutation. Victory rewards join the existing idempotent terminal-resolution transaction, while one centralized item-drop access policy runs before any random roll or item-generation state is derived.
 
@@ -445,7 +445,7 @@ Commit: `feat: enforce City node activation readiness`
 
 ---
 
-### Task 5: Award City discovery, free root, and one point inside each unique victory transaction
+### Task 5: Award City discovery/free root on the first victory and one point on each later unique victory
 
 **Files:**
 - Add: `scripts/progression/passive_tree/city_victory_reward_policy.gd`
@@ -470,19 +470,19 @@ static func apply(candidate: ProfileState, outcome: RunTerminalSnapshot.Outcome)
     if outcome != RunTerminalSnapshot.Outcome.VICTORY:
         return ""
     # Validate overflow and existing allocation shape before changing candidate.
-    # Add discovery/root canonically, then increment available and lifetime once.
+    # Add discovery/root canonically; increment available/lifetime only if City was already discovered.
     return ""
 ```
 
 - [ ] **Step 1: Add red victory-settlement tests**
 
-Cover first victory, later unique victory, same-transaction duplicate, recovery replay/restart, defeat, City-already-discovered, discovered-but-root-missing repair, duplicate root canonicalization, malformed allocation rejection, point overflow, evaluator failure, terminal-mark failure, and store-save failure. Assert extraction/discovery/root/points/terminal stage commit together or not at all.
+Cover point-free first victory, later unique victory, same-transaction duplicate, recovery replay/restart, defeat, City-already-discovered, discovered-but-root-missing repair, duplicate root canonicalization, malformed allocation rejection, subsequent-victory point overflow, evaluator failure, terminal-mark failure, and store-save failure. Assert extraction/discovery/root/points/terminal stage commit together or not at all.
 
 Expected RED: terminal resolution currently changes no City/point fields.
 
 - [ ] **Step 2: Implement the pure policy**
 
-Validate first; mutate second. Do not read `run_history`, add a victory ledger, change `prologue_state`, or grant more than one point. Canonicalize only the City allocation array required by this transaction and preserve unknown IDs.
+Validate first; mutate second. Capture whether City was already discovered before canonical discovery/root repair. Do not read `run_history`, add a victory ledger, change `prologue_state`, grant a point on the first victory, or grant more than one point on a later victory. Canonicalize only the City allocation array required by this transaction and preserve unknown IDs.
 
 - [ ] **Step 3: Call it inside the existing terminal mutation**
 
@@ -510,7 +510,7 @@ The outer `apply_with_resumable_run_revocation` transaction remains the only ide
 git diff --check
 ```
 
-Expected: focused PASS; each integration prints its exact PASS marker once and exits 0; duplicate/recovery paths retain exactly one point per run.
+Expected: focused PASS; each integration prints its exact PASS marker once and exits 0; duplicate/recovery paths keep the first victory point-free and retain exactly one point per subsequent unique run.
 
 Commit: `feat: grant City progression on committed victories`
 

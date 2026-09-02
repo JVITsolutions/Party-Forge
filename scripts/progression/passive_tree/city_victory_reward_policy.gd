@@ -14,12 +14,6 @@ static func apply(candidate: ProfileState, outcome: RunTerminalSnapshot.Outcome)
 		return _error("outcome", "must be victory or defeat")
 	if candidate.passive_points_available < 0 or candidate.passive_points_lifetime_earned < candidate.passive_points_available:
 		return _error("passive_points", "current values are invalid")
-	if (
-		candidate.passive_points_available >= ProfileCodec.JSON_SAFE_INTEGER_MAX
-		or candidate.passive_points_lifetime_earned >= ProfileCodec.JSON_SAFE_INTEGER_MAX
-	):
-		return _error("passive_points", "overflow")
-
 	var allocation_value: Variant = candidate.tree_allocations.get(CITY_TREE_ID, [])
 	if not allocation_value is Array:
 		return _error("tree_allocations", "City allocation must be an array")
@@ -40,14 +34,21 @@ static func apply(candidate: ProfileState, outcome: RunTerminalSnapshot.Outcome)
 			return _error("discovered_trees", "must contain non-empty strings")
 		if tree_id not in discoveries:
 			discoveries.append(tree_id)
+	var city_was_discovered := CITY_TREE_ID in discoveries
+	if city_was_discovered and (
+		candidate.passive_points_available >= ProfileCodec.JSON_SAFE_INTEGER_MAX
+		or candidate.passive_points_lifetime_earned >= ProfileCodec.JSON_SAFE_INTEGER_MAX
+	):
+		return _error("passive_points", "overflow")
 	if CITY_TREE_ID not in discoveries:
 		discoveries.append(CITY_TREE_ID)
 	discoveries.sort()
 
 	candidate.discovered_trees = discoveries
 	candidate.tree_allocations[CITY_TREE_ID] = city_allocations
-	candidate.passive_points_available += 1
-	candidate.passive_points_lifetime_earned += 1
+	if city_was_discovered:
+		candidate.passive_points_available += 1
+		candidate.passive_points_lifetime_earned += 1
 	return ""
 
 static func _error(field: String, reason: String) -> String:

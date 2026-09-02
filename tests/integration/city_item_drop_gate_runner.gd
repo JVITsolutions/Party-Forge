@@ -24,8 +24,8 @@ func _run() -> void:
 		return
 	var profile_id := created.profile.profile_id
 	_assert(ProfileTestSupport.commit_city_victory(profile_id, "city-item-gate-first-victory", _profile_root).ok(), "first victory reveals and roots City")
-	var extra_point := ProfileMutationService.new(ProfileStore.new()).grant_passive_points(profile_id, "city-item-gate-route-point", 1, _profile_root)
-	_assert(extra_point.ok() and extra_point.profile.passive_points_available == 2, "one additional point funds exactly Equipment Registry and Field Pack")
+	var extra_point := ProfileMutationService.new(ProfileStore.new()).grant_passive_points(profile_id, "city-item-gate-route-points", 2, _profile_root)
+	_assert(extra_point.ok() and extra_point.profile.passive_points_available == 2, "two additional points fund exactly Equipment Registry and Field Pack")
 
 	var portfolio := LatticewrightRuntimePortfolioRegistry.new()
 	var loaded := PassiveTreeCatalog.load_defaults(portfolio)

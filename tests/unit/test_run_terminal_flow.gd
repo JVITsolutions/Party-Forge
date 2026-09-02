@@ -255,7 +255,7 @@ func _test_resolution_failure_retries_the_identical_request_and_mutates_once(fai
 	TestAssertions.truthy(durable.ok() and String(decoded.error).is_empty(), "once-only resolution leaves valid durable ownership", failures)
 	if durable.ok() and String(decoded.error).is_empty():
 		TestAssertions.equal((decoded.value as ItemRegistry).ids().count(ITEM_A), 1, "once-only resolution owns the selected item exactly once", failures)
-		TestAssertions.equal(durable.profile.passive_points_available, 1, "successful retry grants exactly one victory point", failures)
+		TestAssertions.equal(durable.profile.passive_points_available, 0, "successful first-victory retry reveals City without granting a point", failures)
 		TestAssertions.equal(durable.profile.tree_allocations.get(CityVictoryRewardPolicy.CITY_TREE_ID, []), [CityVictoryRewardPolicy.CITY_ROOT_ID], "successful retry reveals City and seeds its free root", failures)
 	var after_success := FileAccess.get_sha256(store.profile_path(PROFILE_ID, root))
 	var invalid_post_success: Variant = flow.call(&"resolve", PROFILE_ID, root)
@@ -348,8 +348,8 @@ func _test_generic_and_terminal_resolution_boundaries(failures: Array[String]) -
 	var durable: ProfileState = begun.store.load_profile(PROFILE_ID, begun.root).profile
 	TestAssertions.equal(durable.resumable_run, {}, "terminal resolution atomically revokes the strict run", failures)
 	TestAssertions.equal(int(durable.terminal_resolution.get("stage", -1)), RECOVERY_STAGE_RESOLVED, "terminal resolution atomically writes the resolved receipt", failures)
-	TestAssertions.equal(durable.passive_points_available, 1, "first committed terminal victory grants one available point", failures)
-	TestAssertions.equal(durable.passive_points_lifetime_earned, 1, "first committed terminal victory grants one lifetime point", failures)
+	TestAssertions.equal(durable.passive_points_available, 0, "first committed terminal victory grants no available point", failures)
+	TestAssertions.equal(durable.passive_points_lifetime_earned, 0, "first committed terminal victory grants no lifetime point", failures)
 	TestAssertions.equal(durable.discovered_trees, [CityVictoryRewardPolicy.CITY_TREE_ID], "first committed terminal victory reveals City", failures)
 	TestAssertions.equal(durable.tree_allocations.get(CityVictoryRewardPolicy.CITY_TREE_ID, []), [CityVictoryRewardPolicy.CITY_ROOT_ID], "first committed terminal victory seeds the free City root", failures)
 	TestAssertions.equal(int(begun.flow.call(&"state")), STATE_RESOLVED_AWAITING_PROJECTION, "successful resolution awaits recap projection", failures)
@@ -368,7 +368,7 @@ func _test_generic_and_terminal_resolution_boundaries(failures: Array[String]) -
 		begun.flow.get("_request") as RunResolutionRequest, begun.root,
 	)
 	TestAssertions.truthy(duplicate.ok() and duplicate.duplicate, "same terminal transaction replays as a duplicate", failures)
-	TestAssertions.equal(begun.store.load_profile(PROFILE_ID, begun.root).profile.passive_points_available, 1, "same terminal transaction cannot grant a second point", failures)
+	TestAssertions.equal(begun.store.load_profile(PROFILE_ID, begun.root).profile.passive_points_available, 0, "same first-victory terminal transaction cannot grant a point", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(begun.store.profile_path(PROFILE_ID, begun.root)), duplicate_bytes, "ordinary terminal duplicate is write-free", failures)
 	var changed_source_document: Dictionary = begun.flow.call(&"snapshot").resolution_source.to_dictionary()
 	(changed_source_document["item_state"]["registry"]["items"] as Array)[0]["item_level"] = 29
@@ -447,6 +447,8 @@ func _test_victory_reward_failure_atomicity(failures: Array[String]) -> void:
 	_cleanup_begun(begun)
 
 	var overflow := _begun_flow(0, "victory_reward_overflow", failures, RunTerminalSnapshot.Outcome.VICTORY, func(profile: ProfileState) -> void:
+		profile.discovered_trees = [CityVictoryRewardPolicy.CITY_TREE_ID]
+		profile.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID] = [CityVictoryRewardPolicy.CITY_ROOT_ID]
 		profile.passive_points_available = ProfileCodec.JSON_SAFE_INTEGER_MAX
 		profile.passive_points_lifetime_earned = ProfileCodec.JSON_SAFE_INTEGER_MAX
 	)
