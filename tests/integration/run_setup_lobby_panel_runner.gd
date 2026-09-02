@@ -24,6 +24,7 @@ func _run() -> void:
 	var panel := LOBBY_SCENE.instantiate() as ClassSelectionPanel
 	viewport.add_child(panel)
 	panel.configure(GameCatalog.load_defaults())
+	await _test_geometry_settle_survives_panel_free(viewport)
 	await _wait_for_layout(panel, "initial lobby layout")
 	await _test_initial_focus_priority(viewport, panel)
 	_test_nested_scroll_ancestor_resolution(viewport, panel)
@@ -46,6 +47,17 @@ func _run() -> void:
 		push_error("RUN_SETUP_LOBBY_PANEL_FAILURE: %s" % failure)
 	print("RUN_SETUP_LOBBY_PANEL_SUMMARY: FAIL (%d failures)" % _failures.size())
 	quit(1)
+
+
+func _test_geometry_settle_survives_panel_free(viewport: Window) -> void:
+	var transient := LOBBY_SCENE.instantiate() as ClassSelectionPanel
+	viewport.add_child(transient)
+	transient.configure(GameCatalog.load_defaults())
+	transient.apply_viewport_size(Vector2(1920.0, 1080.0))
+	transient.queue_free()
+	await process_frame
+	await process_frame
+	_assert(not is_instance_valid(transient), "class-card geometry settle disconnects when its panel is freed")
 
 
 func _test_initial_focus_priority(viewport: Window, panel: ClassSelectionPanel) -> void:

@@ -457,23 +457,20 @@ func _queue_card_geometry_settle() -> void:
 		return
 	_card_geometry_settle_queued = true
 	_card_geometry_settle_passes = 0
-	call_deferred(&"_settle_card_geometry")
+	get_tree().process_frame.connect(Callable(self, &"_settle_card_geometry"), CONNECT_ONE_SHOT)
 
 
 func _schedule_card_geometry_settle_pass() -> void:
 	if _card_geometry_settle_queued or not is_inside_tree():
 		return
 	_card_geometry_settle_queued = true
-	call_deferred(&"_settle_card_geometry")
+	get_tree().process_frame.connect(Callable(self, &"_settle_card_geometry"), CONNECT_ONE_SHOT)
 
 
 func _settle_card_geometry() -> void:
-	if not is_inside_tree():
-		_card_geometry_settle_queued = false
-		return
-	await get_tree().process_frame
 	_card_geometry_settle_queued = false
 	if not is_inside_tree():
+		_card_geometry_settle_passes = 0
 		return
 	var changed := false
 	var compact := _layout_mode == RunSetupResponsiveLayout.Mode.COMPACT
