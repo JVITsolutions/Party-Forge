@@ -94,6 +94,9 @@ func _resolve_context(
 ) -> PersonalLootDecision:
 	var decision := PersonalLootDecision.new()
 	_copy_identity_and_event_facts(decision, context, event)
+	if not bool(feature_access_provider.call(context)):
+		decision.reason = &"feature_locked"
+		return decision
 	var effective_source := source_category_override if not source_category_override.is_empty() else event.source_category
 	decision.source_category = effective_source
 	var base_basis_points := int(loot_tuning.drop_basis_points.get(effective_source, 0))
@@ -111,7 +114,7 @@ func _resolve_context(
 		item_level_event = EnemyDefeatEvent.create(event.run_seed, event.defeat_sequence, event.enemy_sequence, event.enemy_id, effective_source, event.world_position, event.encounter_seconds)
 	decision.item_level = item_level_override if item_level_override > 0 else EncounterItemLevelPolicy.resolve(item_level_event, difficulty_id, heat, loot_tuning)
 
-	decision.eligible = _resolve_eligibility(context, event, decision)
+	decision.eligible = _resolve_post_access_eligibility(context, event, decision)
 	decision.success = decision.eligible and (
 		force_success or decision.roll_basis_points < decision.basis_points
 	)
@@ -127,14 +130,11 @@ func _resolve_context(
 		decision.reason = &"roll_failed"
 	return decision
 
-func _resolve_eligibility(
+func _resolve_post_access_eligibility(
 	context: PlayerRunContext,
 	event: EnemyDefeatEvent,
 	decision: PersonalLootDecision,
 ) -> bool:
-	if not bool(feature_access_provider.call(context)):
-		decision.reason = &"feature_locked"
-		return false
 	var leader_id := _leader_member_id(context)
 	if leader_id <= 0 or not context.member_is_available(leader_id):
 		decision.reason = &"leader_unavailable"

@@ -11,7 +11,7 @@ var basis_points := 0
 var roll_basis_points := 0
 var generation_seed := 0
 var generation_sequence := 0
-var item_level := 1
+var item_level := 0
 
 var run_seed := 0
 var defeat_sequence := 0

@@ -68,7 +68,7 @@ func resolve_defeat(event: EnemyDefeatEvent) -> Dictionary:
 	var decisions := roll_service.resolve(event)
 	report["decisions"] = decisions
 	for decision: PersonalLootDecision in decisions:
-		if decision == null or not decision.success:
+		if decision == null or not decision.eligible or not decision.success:
 			continue
 		var context := contexts.context_for(decision.run_player_id)
 		if context == null:

@@ -16,10 +16,13 @@ const GROUND_ITEM_SPATIAL_INDEX := preload("res://scripts/loot/ground_item_spati
 const GROUND_ITEM_TARGETING_SERVICE := preload("res://scripts/loot/ground_item_targeting_service.gd")
 const GROUND_ITEM_PICKUP_SERVICE := preload("res://scripts/loot/ground_item_pickup_service.gd")
 const RUN_SEED_SOURCE := preload("res://scripts/run/run_seed_source.gd")
+const PLAYER_ITEM_DROP_ACCESS_POLICY := preload("res://scripts/loot/player_item_drop_access_policy.gd")
 const DEVELOPER_QUICK_START_RUN_SEED := 1337
 const CURRENT_STARTING_PARTY_SIZE := 1
 const LEDGER_FEATURE_IDS: Array[StringName] = [&"stats", &"current_upgrades", &"equipment_inventory"]
 const LEDGER_UNLOCK_IDS: Array[StringName] = [&"equipment_inventory"]
+const ITEM_DROP_FEATURE_IDS: Array[StringName] = [&"equipment_inventory", &"inventory"]
+const ITEM_DROP_UNLOCK_IDS: Array[StringName] = [&"equipment_inventory", &"inventory"]
 const CITY_TREE_ID := "party-forge-city-v1"
 const CITY_ORIGIN_MAIN_MENU: StringName = &"main_menu"
 const CITY_ORIGIN_ADDITIONAL_SETTINGS: StringName = &"additional_settings"
@@ -821,21 +824,12 @@ func _personal_loot_access_for(context: PlayerRunContext) -> bool:
 	if context == null or active_run_rules == null:
 		return false
 	var profile := context.profile_snapshot
-	if profile == null:
-		return false
-	var inventory := context.run_inventory()
-	if inventory == null or inventory.capacity <= 0:
-		return false
 	var policy := active_run_rules.feature_policy(
-		LEDGER_FEATURE_IDS,
-		LEDGER_UNLOCK_IDS,
+		ITEM_DROP_FEATURE_IDS,
+		ITEM_DROP_UNLOCK_IDS,
 		_profile_unlock_ids(profile),
 	)
-	return policy.resolve(
-		&"equipment_inventory",
-		FeatureAccessPolicy.State.AVAILABLE,
-		&"equipment_inventory",
-	) == FeatureAccessPolicy.State.AVAILABLE
+	return PLAYER_ITEM_DROP_ACCESS_POLICY.allows(profile, context.run_inventory(), policy)
 
 func _profile_unlock_ids(profile: ProfileState) -> Array[StringName]:
 	var unlocked: Array[StringName] = []

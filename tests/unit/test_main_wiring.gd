@@ -900,6 +900,28 @@ func _test_personal_loot_defeat_and_guardian_wiring(failures: Array[String]) -> 
         TestAssertions.equal(player_registry.all_records().size(), 0, "feature-unlocked zero-column Player Mode context fails closed with no uncollectable drop", failures)
     _cleanup_main(player_main)
 
+    var inventory_locked_main := (load("res://scenes/game/main.tscn") as PackedScene).instantiate()
+    _prepare_main(inventory_locked_main)
+    var inventory_locked_profile := inventory_locked_main.active_profile() as ProfileState
+    inventory_locked_profile.permanent_feature_unlocks = ["equipment_inventory"]
+    inventory_locked_profile.inventory_columns = 1
+    TestAssertions.equal(ProfileStore.new().save_profile(inventory_locked_profile, String(inventory_locked_main.get("profile_root"))), "", "positive-capacity fixture persists equipment access without inventory access", failures)
+    TestAssertions.equal(inventory_locked_main.profile_manager.refresh_profile(inventory_locked_profile.profile_id), "", "positive-capacity fixture refreshes the authoritative profile", failures)
+    TestAssertions.truthy(inventory_locked_main.select_leader_class(&"fighter"), "positive-capacity inventory-locked fixture starts through Main", failures)
+    var inventory_locked_roll := inventory_locked_main.personal_loot_roll_service as PersonalLootRollService
+    var inventory_locked_registry := inventory_locked_main.ground_item_registry as GroundItemRegistry
+    if inventory_locked_roll != null and inventory_locked_registry != null:
+        inventory_locked_roll.loot_tuning.drop_basis_points[&"ordinary_melee"] = 10000
+        (inventory_locked_main.get_node("SpawnDirector") as SpawnDirector).call("_on_enemy_defeated", load("res://data/enemies/swarmer.tres") as EnemyDefinition, inventory_locked_main.leader.position, 1)
+        TestAssertions.equal(inventory_locked_main.active_run_context.run_inventory().capacity, 5, "inventory-locked Player Mode run has positive owner capacity", failures)
+        TestAssertions.equal(inventory_locked_registry.all_records().size(), 0, "missing inventory unlock blocks Player Mode drops before generation despite positive capacity", failures)
+    var restored_profile := ProfileStore.new().load_profile(inventory_locked_profile.profile_id, String(inventory_locked_main.get("profile_root")))
+    TestAssertions.truthy(restored_profile.ok(), "positive-capacity fixture reloads for isolation reset", failures)
+    if restored_profile.ok():
+        restored_profile.profile.inventory_columns = 0
+        TestAssertions.equal(ProfileStore.new().save_profile(restored_profile.profile, String(inventory_locked_main.get("profile_root"))), "", "positive-capacity fixture restores the shared test profile column count", failures)
+    _cleanup_main(inventory_locked_main)
+
     var developer_settings := PartyForgeSettings.new()
     developer_settings.mode = PartyForgeSettings.Mode.DEVELOPER_MODE
     developer_settings.unlock_all_implemented_content = true

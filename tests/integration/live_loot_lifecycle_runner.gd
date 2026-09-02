@@ -236,6 +236,9 @@ func _started_main(suffix: String) -> Node:
 	var manager := main.profile_manager as ProfileManager
 	if manager.active_profile() == null:
 		manager.create_profile("Lifecycle %s" % suffix)
+	var profile_before := manager.active_profile() as ProfileState
+	var feature_unlocks_before := profile_before.permanent_feature_unlocks.duplicate()
+	var inventory_columns_before := profile_before.inventory_columns
 	main.saved_settings = settings.copy()
 	if not main.select_leader_class(&"fighter"):
 		_assert(false, "%s run starts" % suffix)
@@ -245,6 +248,14 @@ func _started_main(suffix: String) -> Node:
 	var roll := main.personal_loot_roll_service as PersonalLootRollService
 	var decision := roll.resolve(EnemyDefeatEvent.create(1337, 600, 600, &"swarmer", &"ordinary_melee", main.leader.position, 30.0))[0] as PersonalLootDecision
 	_assert(decision.success and decision.source_category == &"ordinary_specialist" and decision.item_level == 777, "%s applies deterministic source and item-level overrides only through the immutable Developer snapshot" % suffix)
+	var profile_after := manager.active_profile() as ProfileState
+	_assert(profile_after.permanent_feature_unlocks == feature_unlocks_before, "%s Developer Unlock All adds no in-memory item-drop feature unlock" % suffix)
+	_assert(profile_after.inventory_columns == inventory_columns_before, "%s Developer Unlock All adds no in-memory inventory column" % suffix)
+	var reloaded := ProfileStore.new().load_profile(String(profile_after.profile_id), String(main.profile_root))
+	_assert(reloaded.ok(), "%s Developer profile reloads after temporary item-drop access" % suffix)
+	if reloaded.ok():
+		_assert(reloaded.profile.permanent_feature_unlocks == feature_unlocks_before, "%s Developer Unlock All adds no durable item-drop feature unlock" % suffix)
+		_assert(reloaded.profile.inventory_columns == inventory_columns_before, "%s Developer Unlock All adds no durable inventory column" % suffix)
 	return main
 
 func _active_chest_count(main: Node) -> int:
