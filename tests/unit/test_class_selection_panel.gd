@@ -34,9 +34,16 @@ func _test_preview_focus_and_start_treatment(panel: Variant, failures: Array[Str
 		var card := panel.selection_focus(class_projection.id) as Button
 		card.focus_entered.emit()
 		TestAssertions.equal(card.focus_neighbor_right, card.get_path_to(preview), "%s transfers right focus to its own preview" % class_projection.id, failures)
-	var frost := panel.selection_focus(&"frost_mage") as ForgeClassCard
-	var frost_name := frost.get_node("Content/Identity/Name") as Label
-	TestAssertions.truthy(not frost_name.clip_text and frost_name.autowrap_mode != TextServer.AUTOWRAP_OFF, "Frost Mage title wraps without clipping", failures)
+	var class_projections := (panel.get("_projection") as RunSetupLobbyProjection).classes
+	TestAssertions.equal(class_projections.size(), 9, "class catalog exposes all nine selectable names", failures)
+	for class_projection: RunSetupClassProjection in class_projections:
+		var class_card := panel.selection_focus(class_projection.id) as ForgeClassCard
+		var name_label := class_card.get_node("Content/Identity/Name") as Label if class_card != null else null
+		TestAssertions.truthy(name_label != null, "%s owns a class-name label" % class_projection.id, failures)
+		if name_label == null:
+			continue
+		TestAssertions.truthy(not name_label.clip_text and name_label.autowrap_mode != TextServer.AUTOWRAP_OFF, "%s class name wraps without clipping" % class_projection.id, failures)
+		TestAssertions.equal(name_label.size_flags_horizontal, Control.SIZE_EXPAND_FILL, "%s class name expands within its identity band" % class_projection.id, failures)
 	var start := panel.action_focus(&"start") as Button
 	TestAssertions.equal(start.theme_type_variation, &"LivingForgeStartButton", "Start Run uses its explicit accessible focus treatment", failures)
 	var focus_style := panel.theme.get_stylebox(&"focus", &"LivingForgeStartButton") as StyleBoxFlat

@@ -34,6 +34,8 @@ var _options := DEFAULT_OPTIONS.duplicate(true)
 var _layout_mode := RunSetupResponsiveLayout.Mode.DESKTOP
 var _actions_initialized := false
 var _input_tracker := ActiveInputDevice.new()
+var _card_geometry_settle_queued := false
+var _card_geometry_settle_passes := 0
 
 
 func _ready() -> void:
@@ -377,7 +379,8 @@ func _apply_card_geometry(card: ForgeClassCard, compact: bool) -> void:
 		return
 	var text_scale := int(_options.get(&"text_scale_percent", 100))
 	var scaled_height := maxf(0.0, roundf(float(text_scale - 100) * 0.9))
-	card.custom_minimum_size = Vector2(0.0, (128.0 if compact else 144.0) + scaled_height)
+	var base_height := (128.0 if compact else 144.0) + scaled_height
+	card.custom_minimum_size = Vector2(0.0, base_height)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var content := card.get_node("Content") as HBoxContainer
 	var preview := card.get_node("PreviewIndicator") as Control
@@ -387,12 +390,19 @@ func _apply_card_geometry(card: ForgeClassCard, compact: bool) -> void:
 	content.offset_top = 4.0
 	content.offset_right = -148.0 if preview.visible else -8.0
 	content.add_theme_constant_override(&"separation", 4)
+	content.alignment = BoxContainer.ALIGNMENT_BEGIN
 	var portrait := card.get_node("Content/Portrait") as TextureRect
 	portrait.custom_minimum_size = Vector2(24.0, 32.0)
+	var identity := card.get_node("Content/Identity") as Control
+	identity.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	var name := card.get_node("Content/Identity/Name") as Label
 	var role := card.get_node("Content/Identity/Role") as Label
-	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	role.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	role.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	name.clip_text = false
 	name.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	name.custom_minimum_size = Vector2.ZERO
@@ -413,6 +423,70 @@ func _apply_card_geometry(card: ForgeClassCard, compact: bool) -> void:
 	(card.get_node("AttentionBadge/Text") as Label).text = "REVIEW"
 	(card.get_node("FocusFrame") as Control).custom_minimum_size = Vector2.ZERO
 	(card.get_node("LockOverlay") as Control).custom_minimum_size = Vector2.ZERO
+	_fit_card_text(card, compact, text_scale)
+	_queue_card_geometry_settle()
+
+
+func _fit_card_text(card: ForgeClassCard, compact: bool, text_scale: int) -> bool:
+	if card == null or not is_instance_valid(card):
+		return false
+	var identity := card.get_node("Content/Identity") as Control
+	if identity == null or identity.size.x <= 0.0:
+		return false
+	var content := card.get_node("Content") as Control
+	var base_height := (128.0 if compact else 144.0) + maxf(0.0, roundf(float(text_scale - 100) * 0.9))
+	var identity_min_height := identity.size.y
+	if identity_min_height <= 0.0:
+		return false
+	# A newly inserted HBox can report a transient, width-zero minimum before
+	# its first layout pass. Never let that transient value grow a card by
+	# hundreds of pixels; the deferred pass will measure the laid-out column.
+	if identity_min_height > base_height + 64.0:
+		return false
+	var identity_band_height := 76.0 + maxf(0.0, roundf(float(text_scale - 100) * 0.86))
+	var content_height := maxf(identity_band_height, identity_min_height)
+	content.offset_bottom = content.offset_top + content_height
+	var required_height := maxf(base_height, content.offset_bottom + 46.0)
+	var changed := not is_equal_approx(card.custom_minimum_size.y, required_height)
+	card.custom_minimum_size = Vector2(card.custom_minimum_size.x, required_height)
+	return changed
+
+
+func _queue_card_geometry_settle() -> void:
+	if _card_geometry_settle_queued or not is_inside_tree():
+		return
+	_card_geometry_settle_queued = true
+	_card_geometry_settle_passes = 0
+	call_deferred(&"_settle_card_geometry")
+
+
+func _schedule_card_geometry_settle_pass() -> void:
+	if _card_geometry_settle_queued or not is_inside_tree():
+		return
+	_card_geometry_settle_queued = true
+	call_deferred(&"_settle_card_geometry")
+
+
+func _settle_card_geometry() -> void:
+	if not is_inside_tree():
+		_card_geometry_settle_queued = false
+		return
+	await get_tree().process_frame
+	_card_geometry_settle_queued = false
+	if not is_inside_tree():
+		return
+	var changed := false
+	var compact := _layout_mode == RunSetupResponsiveLayout.Mode.COMPACT
+	var text_scale := int(_options.get(&"text_scale_percent", 100))
+	for child: Node in _class_grid().get_children():
+		var card := child as ForgeClassCard
+		if card != null:
+			changed = _fit_card_text(card, compact, text_scale) or changed
+	if changed or _card_geometry_settle_passes < 6:
+		_card_geometry_settle_passes += 1
+		_schedule_card_geometry_settle_pass()
+	else:
+		_card_geometry_settle_passes = 0
 
 
 func _set_card_band(control: Control, left: float, top: float, right: float, bottom: float, minimum: Vector2) -> void:

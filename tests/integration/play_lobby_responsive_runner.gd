@@ -53,18 +53,72 @@ func _run() -> void:
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		await _apply_size_and_scales(main, lobby, viewport_size, 100, 100)
 		await _assert_geometry(lobby, viewport_size, 100, 100, true)
+		await _assert_all_class_name_states(lobby, viewport_size, 100, 100)
 	for viewport_size: Vector2i in [Vector2i(1280, 720), Vector2i(1920, 1080)]:
-		for text_scale: int in PartyForgeSettings.UI_SCALE_OPTIONS:
-			await _apply_size_and_scales(main, lobby, viewport_size, 100, text_scale)
-			await _assert_geometry(lobby, viewport_size, 100, text_scale, false)
 		for ui_scale: int in PartyForgeSettings.UI_SCALE_OPTIONS:
-			await _apply_size_and_scales(main, lobby, viewport_size, ui_scale, 100)
-			await _assert_geometry(lobby, viewport_size, ui_scale, 100, false)
-		for pair: Vector2i in [Vector2i(80, 150), Vector2i(150, 80), Vector2i(150, 150)]:
-			await _apply_size_and_scales(main, lobby, viewport_size, pair.x, pair.y)
-			await _assert_geometry(lobby, viewport_size, pair.x, pair.y, false)
+			for text_scale: int in PartyForgeSettings.UI_SCALE_OPTIONS:
+				await _apply_size_and_scales(main, lobby, viewport_size, ui_scale, text_scale)
+				await _assert_geometry(lobby, viewport_size, ui_scale, text_scale, false)
+				await _assert_all_class_name_states(lobby, viewport_size, ui_scale, text_scale)
 	_assert_independent_scales()
 	_finish(main)
+
+
+func _assert_all_class_name_states(lobby: ClassSelectionPanel, viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
+	var baseline := lobby.get("_projection") as RunSetupLobbyProjection
+	if baseline == null:
+		_assert(false, "class-name state matrix has an authoritative lobby projection")
+		return
+	var classes := baseline.classes
+	var compact := viewport_size.x < 1600 or viewport_size.y < 900
+	var label := "%dx%d ui=%d text=%d" % [viewport_size.x, viewport_size.y, ui_scale, text_scale]
+	for class_projection: RunSetupClassProjection in classes:
+		var preview_card := lobby.selection_focus(class_projection.id) as ForgeClassCard
+		_assert(preview_card != null, "%s preview matrix resolves %s" % [label, class_projection.id])
+		if preview_card == null:
+			continue
+		preview_card.grab_focus()
+		await _wait_for_layout(lobby, "%s preview=%s" % [label, class_projection.id])
+		await _frames(2)
+		_assert(lobby.previewed_class_id() == class_projection.id, "%s focus previews the exact %s class" % [label, class_projection.id])
+		var preview_grid := lobby.get_node("Content/Margin/Layout/Body/LeftColumn/ClassRoster/Scroll/Grid") as GridContainer
+		for child: Node in preview_grid.get_children():
+			_assert_class_card_bands(child as ForgeClassCard, "%s preview=%s" % [label, class_projection.id], text_scale, compact)
+		_assert_class_card_grid_nonoverlap(preview_grid, "%s preview=%s" % [label, class_projection.id])
+
+	for class_projection: RunSetupClassProjection in classes:
+		var selected_classes: Array[RunSetupClassProjection] = []
+		for candidate: RunSetupClassProjection in classes:
+			var selected_candidate := candidate.copy()
+			if selected_candidate.id == class_projection.id:
+				selected_candidate.compatibility = RunSetupClassProjection.Compatibility.COMPATIBLE
+			selected_classes.append(selected_candidate)
+		var selected_projection := RunSetupLobbyProjection.create(
+			baseline.seats,
+			selected_classes,
+			class_projection.id,
+			class_projection.id,
+			RunSetupLobbyProjection.State.READY,
+			"Ready to begin your run.",
+		)
+		selected_projection.set_meta(&"high_contrast", false)
+		selected_projection.set_meta(&"ui_scale_percent", ui_scale)
+		selected_projection.set_meta(&"text_scale_percent", text_scale)
+		selected_projection.set_meta(&"reduced_motion", false)
+		lobby.present(selected_projection)
+		lobby.apply_viewport_size(Vector2(viewport_size))
+		await _wait_for_layout(lobby, "%s selected=%s" % [label, class_projection.id])
+		await _frames(4)
+		var selected_card := lobby.selection_focus(class_projection.id) as ForgeClassCard
+		_assert(selected_card != null and (selected_card.get_node("SelectionNotch") as Control).is_visible_in_tree(), "%s selected matrix marks %s" % [label, class_projection.id])
+		_assert(selected_card != null and (selected_card.get_node("CompatibilityBadge") as Control).is_visible_in_tree(), "%s ready matrix marks %s" % [label, class_projection.id])
+		var selected_grid := lobby.get_node("Content/Margin/Layout/Body/LeftColumn/ClassRoster/Scroll/Grid") as GridContainer
+		for child: Node in selected_grid.get_children():
+			_assert_class_card_bands(child as ForgeClassCard, "%s selected=%s ready" % [label, class_projection.id], text_scale, compact)
+		_assert_class_card_grid_nonoverlap(selected_grid, "%s selected=%s ready" % [label, class_projection.id])
+	lobby.present(baseline)
+	lobby.apply_viewport_size(Vector2(viewport_size))
+	await _wait_for_layout(lobby, "%s baseline restore" % label)
 
 
 func _create_profile(profile_root: String) -> String:
@@ -96,6 +150,7 @@ func _apply_size_and_scales(main: PartyForgeMain, lobby: ClassSelectionPanel, vi
 	main.call(&"_present_lobby")
 	lobby.apply_viewport_size(Vector2(viewport_size))
 	await _wait_for_layout(lobby, "layout %dx%d ui=%d text=%d" % [viewport_size.x, viewport_size.y, ui_scale, text_scale])
+	await _frames(4)
 	var prompt := lobby.get_node("Content/Margin/Layout/Footer/InputPrompt") as ForgeInputPrompt
 	_scale_observations["%dx%d:%d:%d" % [viewport_size.x, viewport_size.y, ui_scale, text_scale]] = {
 		"font": prompt.get_theme_font_size(&"font_size"),
@@ -162,6 +217,7 @@ func _assert_geometry(lobby: ClassSelectionPanel, viewport_size: Vector2i, ui_sc
 		_assert(availability.text == ForgeSeatCard.COMING_SOON_COPY, "P%d Coming Soon copy remains exact %s" % [index + 1, label])
 	for child: Node in roster.get_children():
 		_assert_class_card_bands(child as ForgeClassCard, label, text_scale, compact)
+	_assert_class_card_grid_nonoverlap(roster, label)
 	_assert(selected.is_visible_in_tree() and (selected.get_node("SelectionNotch") as Control).is_visible_in_tree(), "selected class remains visible %s" % label)
 	if viewport_size == Vector2i(1280, 720) and text_scale == 150 and ui_scale in [100, 150]:
 		roster_scroll.ensure_control_visible(selected)
@@ -203,10 +259,17 @@ func _assert_class_card_bands(card: ForgeClassCard, label: String, text_scale: i
 	var portrait := card.get_node("Content/Portrait") as Control
 	var identity := card.get_node("Content/Identity") as Control
 	var name := card.get_node("Content/Identity/Name") as Label
+	var identity_role := card.get_node("Content/Identity/Role") as Label
+	var identity_playstyle := card.get_node("Content/Identity/Playstyle") as Label
 	var expected_height := (128.0 if compact else 144.0) + maxf(0.0, roundf(float(text_scale - 100) * 0.64))
 	_assert(card.size.y >= expected_height, "%s card uses deterministic text-scale height %s expected>=%.0f actual=%.0f" % [card.name, label, expected_height, card.size.y])
 	_assert(card_rect.encloses(content.get_global_rect()) and card_rect.encloses(portrait.get_global_rect()) and card_rect.encloses(identity.get_global_rect()), "%s portrait and identity remain inside card bounds %s" % [card.name, label])
 	_assert(not portrait.get_global_rect().intersects(identity.get_global_rect()), "%s portrait and identity never intersect %s" % [card.name, label])
+	_assert(identity.get_global_rect().encloses(name.get_global_rect()) and identity.get_global_rect().encloses(identity_role.get_global_rect()) and identity.get_global_rect().encloses(identity_playstyle.get_global_rect()), "%s identity labels remain inside their bounded text column %s" % [card.name, label])
+	var name_font := name.get_theme_font(&"font")
+	var name_font_size := name.get_theme_font_size(&"font_size")
+	var name_advance := name_font.get_string_size(name.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, name_font_size).x if name_font != null else 0.0
+	_assert(name.get_line_count() > 1 or name_advance <= name.size.x + 0.5, "%s title glyph advance fits its label or wraps %s advance=%.1f width=%.1f" % [card.name, label, name_advance, name.size.x])
 	_assert(not name.clip_text and name.autowrap_mode != TextServer.AUTOWRAP_OFF, "%s title never clips or escapes its card %s" % [card.name, label])
 	_assert(card_rect.encloses(name.get_global_rect()), "%s title rectangle stays contained %s" % [card.name, label])
 	for layer_name: String in ["PreviewIndicator", "SelectionNotch", "CompatibilityBadge", "AttentionBadge"]:
@@ -240,6 +303,17 @@ func _assert_class_card_bands(card: ForgeClassCard, label: String, text_scale: i
 		_assert((card.get_node("CompatibilityBadge/Text") as Label).text == "READY", "%s production compatibility badge says READY %s" % [card.name, label])
 	if (card.get_node("AttentionBadge") as Control).is_visible_in_tree():
 		_assert((card.get_node("AttentionBadge/Text") as Label).text == "REVIEW", "%s production attention badge says REVIEW %s" % [card.name, label])
+
+
+func _assert_class_card_grid_nonoverlap(grid: GridContainer, label: String) -> void:
+	var cards: Array[ForgeClassCard] = []
+	for child: Node in grid.get_children():
+		var card := child as ForgeClassCard
+		if card != null and card.is_visible_in_tree():
+			cards.append(card)
+	for left_index: int in cards.size():
+		for right_index: int in range(left_index + 1, cards.size()):
+			_assert(not cards[left_index].get_global_rect().intersects(cards[right_index].get_global_rect()), "%s class cards do not overlap (%s/%s)" % [label, cards[left_index].class_id, cards[right_index].class_id])
 
 
 func _assert_closed_focus_graph(lobby: ClassSelectionPanel, label: String) -> void:
@@ -296,7 +370,15 @@ func _wait_for_layout(lobby: ClassSelectionPanel, description: String) -> void:
 		var body := lobby.get_node("Content/Margin/Layout/Body") as Control
 		var footer := lobby.get_node("Content/Margin/Layout/Footer") as Control
 		var signature := PackedFloat32Array([body.position.x, body.position.y, body.size.x, body.size.y, footer.position.y, footer.size.x, footer.size.y])
-		if signature == previous and body.size.x > 0.0 and footer.size.x > 0.0:
+		var grid := lobby.get_node("Content/Margin/Layout/Body/LeftColumn/ClassRoster/Scroll/Grid") as GridContainer
+		for child: Node in grid.get_children():
+			var card := child as ForgeClassCard
+			var identity := card.get_node("Content/Identity") as Control
+			signature.append(card.size.y)
+			signature.append(identity.position.y)
+			signature.append(identity.size.y)
+		var geometry_settling := bool(lobby.get("_card_geometry_settle_queued")) or int(lobby.get("_card_geometry_settle_passes")) > 0
+		if signature == previous and not geometry_settling and body.size.x > 0.0 and footer.size.x > 0.0:
 			stable += 1
 			if stable >= 2:
 				return
