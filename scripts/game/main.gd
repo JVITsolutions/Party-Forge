@@ -24,7 +24,7 @@ const CITY_TREE_ID := "party-forge-city-v1"
 const CITY_ORIGIN_MAIN_MENU: StringName = &"main_menu"
 const CITY_ORIGIN_ADDITIONAL_SETTINGS: StringName = &"additional_settings"
 const CITY_UNAVAILABLE_STATUS := "City services are temporarily unavailable."
-const CITY_LOCKED_STATUS := "Complete the prologue to unlock the City passive tree."
+const CITY_LOCKED_STATUS := "Win a run to reveal the City passive tree."
 const CITY_PROFILE_REQUIRED_STATUS := "Choose a profile before opening the City passive tree."
 const CITY_DEVELOPER_REQUIRED_STATUS := "Save Developer Mode before opening the Developer City Preview."
 const DEVELOPER_QUICK_START_UNAVAILABLE_STATUS := "Developer Quick Start is temporarily unavailable."
@@ -74,6 +74,7 @@ var settings_path := PartyForgeSettingsStore.DEFAULT_PATH
 var profile_root := ProfileStore.DEFAULT_ROOT
 var profile_manager: ProfileManager
 var profile_bootstrap_error := ""
+var passive_tree_portfolio: LatticewrightRuntimePortfolioRegistry
 var passive_tree_definition: PassiveTreeDefinition
 var passive_tree_mutations: PassiveTreeMutationService
 var passive_tree_view_model: PassiveTreeViewModel
@@ -1842,13 +1843,9 @@ func _storage_route_allowed(route_id: StringName, profile: ProfileState) -> bool
 
 
 func _warehouse_guidance(profile: ProfileState) -> int:
-	var durable_city_access := (
-		profile != null
-		and profile.prologue_state == ProfileState.PrologueState.COMPLETED
-		and CITY_TREE_ID in profile.discovered_trees
-	)
+	var durable_city_access := profile != null and CITY_TREE_ID in profile.discovered_trees
 	if not durable_city_access:
-		return WarehouseLockedDialogScript.Guidance.PROLOGUE_REQUIRED
+		return WarehouseLockedDialogScript.Guidance.FIRST_VICTORY_REQUIRED
 	return WarehouseLockedDialogScript.Guidance.CITY_TREE_AVAILABLE if _city_runtime_available() else WarehouseLockedDialogScript.Guidance.TEMPORARILY_UNAVAILABLE
 
 
@@ -2078,13 +2075,14 @@ func _expose_profile_bootstrap_diagnostic() -> void:
 
 
 func _load_passive_tree_runtime() -> void:
-	var loaded := PassiveTreeCatalog.load_defaults()
+	passive_tree_portfolio = LatticewrightRuntimePortfolioRegistry.new()
+	var loaded := PassiveTreeCatalog.load_defaults(passive_tree_portfolio)
 	for reason: String in loaded.errors:
 		push_error(reason)
 	passive_tree_definition = loaded.tree
 	var effects := PassiveEffectRegistry.new()
 	var requirements := PassiveRequirementRegistry.new()
-	var progression := PassiveTreeProgressionService.new(effects, requirements)
+	var progression := PassiveTreeProgressionService.new(effects, requirements, null, passive_tree_portfolio)
 	var resolver := PassiveEffectResolver.new(effects)
 	passive_tree_mutations = PassiveTreeMutationService.new(ProfileMutationService.new(ProfileStore.new()), progression, resolver)
 	passive_tree_view_model = PassiveTreeViewModel.new(progression, resolver, effects, requirements)
@@ -2139,7 +2137,7 @@ func _city_route_denial(developer_preview: bool) -> String:
 	if developer_preview:
 		if saved_settings == null or saved_settings.mode != PartyForgeSettings.Mode.DEVELOPER_MODE:
 			return CITY_DEVELOPER_REQUIRED_STATUS
-	elif profile.prologue_state != ProfileState.PrologueState.COMPLETED or CITY_TREE_ID not in profile.discovered_trees:
+	elif CITY_TREE_ID not in profile.discovered_trees:
 		return CITY_LOCKED_STATUS
 	if not _city_runtime_available():
 		return CITY_UNAVAILABLE_STATUS
@@ -2150,6 +2148,8 @@ func _city_runtime_available() -> bool:
 	return (
 		passive_tree_definition != null
 		and String(passive_tree_definition.id) == CITY_TREE_ID
+		and passive_tree_portfolio != null
+		and passive_tree_portfolio.has_graph(&"party-forge-city", &"city-passive-tree")
 		and profile_manager != null
 		and passive_tree_mutations != null
 		and passive_tree_view_model != null

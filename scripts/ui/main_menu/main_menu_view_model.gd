@@ -53,10 +53,7 @@ static func build(
 				result.status_text = "Ready for your next run."
 
 	var developer_mode := settings_valid and supplied_settings.mode == PartyForgeSettings.Mode.DEVELOPER_MODE
-	var durable_city_access := (
-		supplied_profile.prologue_state == ProfileState.PrologueState.COMPLETED
-		and CITY_TREE_ID in supplied_profile.discovered_trees
-	)
+	var durable_city_access := CITY_TREE_ID in supplied_profile.discovered_trees
 	result.city_tree_visible = developer_mode or durable_city_access
 	result.city_tree_enabled = result.city_tree_visible and city_tree_available is bool and city_tree_available
 	result.city_tree_label = "Developer City Preview" if developer_mode else "City Passive Tree"

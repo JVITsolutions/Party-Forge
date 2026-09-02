@@ -3,7 +3,7 @@ extends RefCounted
 const SCRIPT_PATH := "res://scripts/ui/warehouse/warehouse_locked_dialog.gd"
 const SCENE_PATH := "res://scenes/ui/warehouse/warehouse_locked_dialog.tscn"
 const CITY_TREE_AVAILABLE := 0
-const PROLOGUE_REQUIRED := 1
+const FIRST_VICTORY_REQUIRED := 1
 const TEMPORARILY_UNAVAILABLE := 2
 
 
@@ -45,8 +45,8 @@ func _test_guidance_copy_and_focus(dialog: Node, return_focus: Control, failures
 	_assert_initial_focus(dialog, _city_tree(dialog), "available guidance initially focuses City tree CTA", failures)
 	_assert_focus_loop([_city_tree(dialog), _back(dialog)], failures)
 
-	dialog.call("open", PROLOGUE_REQUIRED, return_focus)
-	TestAssertions.equal(_body(dialog).text, "Complete the prologue to access the City tree. Then unlock Stash Access to open the Warehouse.", "prologue guidance body", failures)
+	dialog.call("open", FIRST_VICTORY_REQUIRED, return_focus)
+	TestAssertions.equal(_body(dialog).text, "Win a run to reveal the City tree. Then unlock Stash Access to open the Warehouse.", "first-victory guidance body", failures)
 	TestAssertions.truthy(not _city_tree(dialog).visible and _back(dialog).visible, "prologue guidance withholds dead CTA", failures)
 	_assert_initial_focus(dialog, _back(dialog), "prologue guidance initially focuses Back", failures)
 	_assert_focus_loop([_back(dialog)], failures)
@@ -59,7 +59,7 @@ func _test_guidance_copy_and_focus(dialog: Node, return_focus: Control, failures
 
 
 func _test_close_paths_restore_exact_origin(dialog: Node, return_focus: Control, failures: Array[String]) -> void:
-	dialog.call("open", PROLOGUE_REQUIRED, return_focus)
+	dialog.call("open", FIRST_VICTORY_REQUIRED, return_focus)
 	TestAssertions.equal(dialog.get("_return_focus"), return_focus, "Escape retains the exact Warehouse origin before restoration", failures)
 	var city_tree_count: Array[int] = [0]
 	dialog.connect("city_tree_requested", func(_origin: Control) -> void: city_tree_count[0] += 1, CONNECT_ONE_SHOT)
@@ -68,7 +68,7 @@ func _test_close_paths_restore_exact_origin(dialog: Node, return_focus: Control,
 	_assert_restored_focus(dialog, return_focus, "Escape restores the exact Warehouse origin", failures)
 	TestAssertions.equal(city_tree_count[0], 0, "Escape emits no City tree intent", failures)
 
-	dialog.call("open", PROLOGUE_REQUIRED, return_focus)
+	dialog.call("open", FIRST_VICTORY_REQUIRED, return_focus)
 	TestAssertions.equal(dialog.get("_return_focus"), return_focus, "Back retains the exact Warehouse origin before restoration", failures)
 	(_back(dialog) as Button).pressed.emit()
 	TestAssertions.truthy(not dialog.is_open(), "Back closes locked guidance", failures)

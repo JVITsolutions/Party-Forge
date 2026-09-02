@@ -61,7 +61,7 @@ func _run() -> void:
 	root.add_child(main)
 	await _frames(4)
 
-	# Fixture setup only: complete the prologue so the existing City tree and the
+	# Fixture setup only: commit first-victory City discovery so the City tree and
 	# no-stash Warehouse guidance are both available for production composition.
 	var created := main.profile_manager.create_profile("Warehouse Activation", 1000)
 	_assert(created.ok(), "fixture setup: responsive profile is created")
@@ -69,8 +69,8 @@ func _run() -> void:
 		await _finish(main)
 		return
 	var profile_id := created.profile.profile_id
-	var completion := ProfileMutationService.new(ProfileStore.new()).complete_prologue(profile_id, "warehouse-responsive-complete", _profile_root)
-	_assert(completion.ok(), "fixture setup: responsive profile completes prologue")
+	var completion := ProfileTestSupport.commit_city_victory(profile_id, "warehouse-responsive-first-victory", _profile_root)
+	_assert(completion.ok(), "fixture setup: responsive profile commits first-victory City discovery")
 	if not completion.ok():
 		await _finish(main)
 		return

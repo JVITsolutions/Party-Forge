@@ -41,6 +41,7 @@ func _test_direct_projection_matrix(tree: PassiveTreeDefinition, failures: Array
 	var empty := _profile(tree.id, [])
 	TestAssertions.equal(reconciler.reconcile(empty, tree, PassiveEffectResolver.new(PassiveEffectRegistry.new())), "", "empty allocations reconcile", failures)
 	TestAssertions.equal(empty.inventory_columns, 0, "empty allocations grant no columns", failures)
+	TestAssertions.equal(empty.extraction_capacity, 0, "empty allocations grant no extraction capacity", failures)
 	TestAssertions.equal(empty.stash_tabs, [], "empty allocations grant no stash", failures)
 
 	var field_pack := _profile(tree.id, ["field-pack", "field-pack"])
@@ -57,16 +58,26 @@ func _test_direct_projection_matrix(tree: PassiveTreeDefinition, failures: Array
 	TestAssertions.equal(stash.stash_tabs[0]["container_id"], "stash-tab-000", "first stash id is stable", failures)
 	TestAssertions.equal(stash.stash_tabs[0], _tab_document(PROFILE_ID, "stash-tab-000"), "new stash tab uses the exact schema owner kind capacity and empty slots", failures)
 
+	var extraction := _profile(tree.id, ["extraction-license"])
+	TestAssertions.equal(reconciler.reconcile(extraction, tree, PassiveEffectResolver.new(PassiveEffectRegistry.new())), "", "Extraction License allocation reconciles", failures)
+	TestAssertions.equal(extraction.extraction_capacity, 1, "Extraction License grants one extraction slot", failures)
+
 	var both := _profile(tree.id, ["stash-access", "field-pack", "stash-access", "field-pack"])
 	TestAssertions.equal(reconciler.reconcile(both, tree, PassiveEffectResolver.new(PassiveEffectRegistry.new())), "", "combined storage allocations reconcile", failures)
 	TestAssertions.equal(both.inventory_columns, 1, "combined allocations keep one Field Pack column", failures)
 	TestAssertions.equal(both.stash_tabs.size(), 1, "combined allocations keep one Stash Access tab", failures)
+	TestAssertions.equal(both.extraction_capacity, 0, "storage-only allocations grant no extraction capacity", failures)
+
+	var all_storage := _profile(tree.id, ["field-pack", "stash-access", "extraction-license"])
+	TestAssertions.equal(reconciler.reconcile(all_storage, tree, PassiveEffectResolver.new(PassiveEffectRegistry.new())), "", "combined live storage and extraction allocations reconcile", failures)
+	TestAssertions.equal([all_storage.inventory_columns, all_storage.stash_tabs.size(), all_storage.extraction_capacity], [1, 1, 1], "combined live effects project exactly once", failures)
 
 func _test_idempotence_monotonicity_and_existing_placement(tree: PassiveTreeDefinition, failures: Array[String]) -> void:
 	var reconciler := ProfileStorageReconciler.new()
 	var profile := _profile(tree.id, ["field-pack", "stash-access"])
 	var item := _item("item-existing-placement", 0)
 	profile.inventory_columns = 3
+	profile.extraction_capacity = 4
 	profile.item_records = ItemRegistry.new([item]).to_dictionary()
 	profile.stash_tabs = [_tab_document(PROFILE_ID, "stash-tab-000", {42: item.instance_id})]
 	var before_item := profile.item_records.duplicate(true)
@@ -74,6 +85,7 @@ func _test_idempotence_monotonicity_and_existing_placement(tree: PassiveTreeDefi
 	TestAssertions.equal(reconciler.reconcile(profile, tree, PassiveEffectResolver.new(PassiveEffectRegistry.new())), "", "pre-existing placed item reconciles", failures)
 	var once := JSON.stringify(profile.to_dictionary())
 	TestAssertions.equal(profile.inventory_columns, 3, "reconciliation never shrinks existing columns", failures)
+	TestAssertions.equal(profile.extraction_capacity, 4, "reconciliation never shrinks existing extraction capacity", failures)
 	TestAssertions.equal(profile.item_records, before_item, "reconciliation never rewrites item records", failures)
 	TestAssertions.equal(profile.stash_tabs, before_tabs, "reconciliation preserves exact existing slot placement", failures)
 	TestAssertions.equal(reconciler.reconcile(profile, tree, PassiveEffectResolver.new(PassiveEffectRegistry.new())), "", "repeated reconciliation succeeds", failures)
@@ -118,6 +130,16 @@ func _test_failures_are_atomic(tree: PassiveTreeDefinition, failures: Array[Stri
 	var malformed_member := _profile(tree.id, [])
 	malformed_member.tree_allocations[String(tree.id)] = ["field-pack", 7]
 	_assert_failure_atomic(malformed_member, tree, valid_resolver, "tree_allocations", "non-string allocation member", failures)
+
+	var invalid_existing_capacity := _profile(tree.id, ["extraction-license"])
+	invalid_existing_capacity.extraction_capacity = -1
+	_assert_failure_atomic(invalid_existing_capacity, tree, valid_resolver, "extraction_capacity", "negative existing extraction capacity", failures)
+	var unsafe_capacity := _profile(tree.id, ["city-heart"])
+	unsafe_capacity.inventory_columns = 1
+	var unsafe_capacity_resolution := PassiveEffectResolution.new(
+		{&"extraction_capacity": {&"profile": ProfileCodec.JSON_SAFE_INTEGER_MAX + 1}}, {}, {}, [], [], [], []
+	)
+	_assert_failure_atomic(unsafe_capacity, tree, StubResolver.new(unsafe_capacity_resolution), "extraction_capacity", "unsafe resolved extraction capacity", failures)
 
 	var invalid_contracts: Array[Dictionary] = [
 		{"label": "nonpositive count", "field": "stash_tabs", "contract": {"count": 0, "scope": &"profile", "slotsPerTab": 100}},

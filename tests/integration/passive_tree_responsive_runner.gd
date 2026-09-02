@@ -26,7 +26,7 @@ func _run() -> void:
 		return
 	var profile_id := created.profile.profile_id
 	var profile_mutations := ProfileMutationService.new(ProfileStore.new())
-	_assert(profile_mutations.complete_prologue(profile_id, "responsive-discover", _profile_root).ok(), "responsive profile discovers City")
+	_assert(ProfileTestSupport.commit_city_victory(profile_id, "responsive-first-victory", _profile_root).ok(), "responsive profile commits first-victory City discovery")
 	_assert(profile_mutations.grant_passive_points(profile_id, "responsive-grant", 5, _profile_root).ok(), "responsive profile receives points")
 	_assert(manager.refresh_profile(profile_id).is_empty(), "responsive manager refreshes its profile")
 	var loaded := PassiveTreeCatalog.load_defaults()
@@ -88,10 +88,11 @@ func _run() -> void:
 		canvas.set_pan(-far_view.position * canvas.zoom_value())
 		await _frames(2)
 		_assert(_encloses(canvas.get_global_rect(), far_control.get_global_rect()), "canvas pan brings the far selected node into view at %dx%d" % [viewport_size.x, viewport_size.y])
+		_assert(detail_sections.text.contains("Coming Soon") and detail_sections.text.contains("Developer Preview"), "future-node disclosure remains readable at %dx%d" % [viewport_size.x, viewport_size.y])
 
 		canvas.select_node(&"equipment-registry")
 		_assert(detail_sections.text.contains("Cost") and detail_sections.text.contains("Refund Policy"), "selected detail disclosures remain readable at %dx%d" % [viewport_size.x, viewport_size.y])
-		_assert(detail_sections.text.contains("Coming Soon") and detail_sections.text.contains("Developer Preview"), "future-contract disclosure remains readable at %dx%d" % [viewport_size.x, viewport_size.y])
+		_assert(detail_sections.text.contains("Unlock Feature: equipment_inventory.") and not detail_sections.text.contains("Coming Soon"), "implemented Equipment Registry disclosure remains readable at %dx%d" % [viewport_size.x, viewport_size.y])
 		allocate_button.pressed.emit()
 		await _frames(2)
 		_assert(confirmation.visible and confirmation.is_visible_in_tree(), "confirmation is visible at %dx%d" % [viewport_size.x, viewport_size.y])

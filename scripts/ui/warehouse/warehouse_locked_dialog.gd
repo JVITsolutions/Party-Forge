@@ -4,12 +4,12 @@ extends CanvasLayer
 signal city_tree_requested(return_focus: Control)
 signal closed
 
-enum Guidance { CITY_TREE_AVAILABLE, PROLOGUE_REQUIRED, TEMPORARILY_UNAVAILABLE }
+enum Guidance { CITY_TREE_AVAILABLE, FIRST_VICTORY_REQUIRED, TEMPORARILY_UNAVAILABLE }
 
 const TITLE := "WAREHOUSE LOCKED"
 const REQUIREMENT := "Requires Stash Access"
 const AVAILABLE_BODY := "Unlock Stash Access in the City tree to open permanent storage."
-const PROLOGUE_BODY := "Complete the prologue to access the City tree. Then unlock Stash Access to open the Warehouse."
+const FIRST_VICTORY_BODY := "Win a run to reveal the City tree. Then unlock Stash Access to open the Warehouse."
 const UNAVAILABLE_BODY := "City services are temporarily unavailable. Try again later."
 
 var _return_focus: Control
@@ -30,8 +30,8 @@ func open(guidance: Guidance, return_focus: Control) -> bool:
 			_body().text = AVAILABLE_BODY
 			_view_city_tree().visible = true
 			_view_city_tree().disabled = false
-		Guidance.PROLOGUE_REQUIRED:
-			_body().text = PROLOGUE_BODY
+		Guidance.FIRST_VICTORY_REQUIRED:
+			_body().text = FIRST_VICTORY_BODY
 			_view_city_tree().visible = false
 			_view_city_tree().disabled = true
 		Guidance.TEMPORARILY_UNAVAILABLE:

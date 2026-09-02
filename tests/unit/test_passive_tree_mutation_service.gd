@@ -209,17 +209,17 @@ func _test_stash_projects_permanent_discoveries_and_storage(failures: Array[Stri
 	var profile := _profile(tree.id, ["city-heart", "civic-archive"], 5)
 	profile.permanent_feature_unlocks = ["legacy", "legacy", "stash"]
 	profile.discovered_buildings = ["warehouse", "forge", "forge"]
-	profile.discovered_trees = ["zeta-tree", "party-forge-city-v1", "party-forge-city-v1"]
+	profile.discovered_trees = ["zeta-tree", "party-forge-warehouse-v1", "party-forge-city-v1", "party-forge-city-v1"]
 	profile.stash_tabs = []
 	_save_fixture(store, profile, root, "stash projection fixture", failures)
 
 	var result := _service(store).allocate(ID, "allocate-stash-access", tree, &"stash-access", false, root)
-	var saved := store.load_profile(ID, root).profile
+	var saved := ProfileStore.new().load_profile(ID, root).profile
 	TestAssertions.truthy(result.ok(), "Stash Access allocation commits", failures)
 	TestAssertions.equal(saved.passive_points_available, 4, "Stash Access charges its exact cost", failures)
 	TestAssertions.equal(saved.permanent_feature_unlocks, ["legacy", "stash"], "permanent unlocks merge monotonically in unique lexical form", failures)
 	TestAssertions.equal(saved.discovered_buildings, ["forge", "warehouse"], "building discoveries merge monotonically in unique lexical form", failures)
-	TestAssertions.equal(saved.discovered_trees, ["party-forge-city-v1", "zeta-tree"], "Stash Access no longer invents Warehouse tree discovery", failures)
+	TestAssertions.equal(saved.discovered_trees, ["party-forge-city-v1", "party-forge-warehouse-v1", "zeta-tree"], "Stash Access preserves pre-existing Warehouse tree discovery after reload without inventing a new tree", failures)
 	TestAssertions.equal(saved.stash_tabs.size(), 1, "Stash Access materializes one persistent stash tab", failures)
 	TestAssertions.equal(saved.stash_tabs[0], ItemSlotContainer.create(&"stash-tab-000", ItemSlotContainer.PROFILE_STASH_TAB, ID, 100).to_dictionary(), "permanent allocation materializes the exact stash tab contract", failures)
 	ProfileTestSupport.remove_tree(root)

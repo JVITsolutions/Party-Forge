@@ -44,6 +44,10 @@ const LOGISTICS_IDS: Array[StringName] = [
 	&"field-pack", &"stash-access", &"extraction-license", &"secured-loadout",
 	&"leader-loadout-extraction",
 ]
+const IMMEDIATE_CITY_IDS: Array[StringName] = [
+	&"city-heart", &"equipment-registry", &"field-pack", &"stash-access",
+	&"extraction-license", &"secured-loadout", &"leader-loadout-extraction",
+]
 const CITY_EFFECT_IDS: Array[StringName] = [
 	&"building_discovery", &"extraction_capacity", &"feature_unlock",
 	&"inventory_columns", &"stash_tabs", &"tree_discovery",
@@ -272,6 +276,25 @@ func _test_city_policy(failures: Array[String]) -> void:
 	var stash_effect := _find_effect(wrong_stash_size_tree.node(&"stash-access"), &"stash_tabs")
 	stash_effect.parameters["slotsPerTab"] = 99
 	_assert_policy_invalid(policy, wrong_stash_size_tree, "City stash tab size is exactly 100", "100", failures)
+
+	for node_id: StringName in IMMEDIATE_CITY_IDS:
+		var wrong_cost_tree := _load_city_tree(failures)
+		wrong_cost_tree.node(node_id).cost = 1 if node_id == &"city-heart" else 0
+		_assert_policy_invalid(policy, wrong_cost_tree, "%s requires its exact immediate cost" % node_id, "cost", failures)
+
+	var wrong_effect_tree := _load_city_tree(failures)
+	wrong_effect_tree.node(&"equipment-registry").effects[0].parameters["featureId"] = "inventory"
+	_assert_policy_invalid(policy, wrong_effect_tree, "Equipment Registry requires its exact effect", "effects", failures)
+	var extra_stash_tree_discovery := _load_city_tree(failures)
+	extra_stash_tree_discovery.node(&"stash-access").effects.append(PassiveTreeEffect.new(&"tree_discovery", &"set", true, {"treeId": "party-forge-warehouse-v1"}))
+	_assert_policy_invalid(policy, extra_stash_tree_discovery, "Stash Access cannot discover the Warehouse tree", "effects", failures)
+
+	var wrong_route_tree := _load_city_tree(failures)
+	for connection: PassiveTreeConnection in wrong_route_tree.connections:
+		if connection.from_id == &"equipment-registry" and connection.to_id == &"field-pack":
+			connection.to_id = &"secured-loadout"
+			break
+	_assert_policy_invalid(policy, wrong_route_tree, "immediate City route must remain exact", "route", failures)
 
 func _test_default_catalog(failures: Array[String]) -> void:
 	var first := PassiveTreeCatalog.load_defaults()
