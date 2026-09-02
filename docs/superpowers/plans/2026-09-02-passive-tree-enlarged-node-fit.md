@@ -91,7 +91,7 @@ Update the existing geometry boundary fixtures so horizontal centers at 180 unit
 Run from the exact LatticeWright worktree:
 
 ```powershell
-npx vitest run scripts/party-forge/party-forge-city-v3-contract.test.mjs scripts/party-forge/create-party-forge-portfolio.test.mjs
+node --test scripts/party-forge/party-forge-city-v3-contract.test.mjs scripts/party-forge/create-party-forge-portfolio.test.mjs
 ```
 
 Expected: nonzero exit. The exact-coordinate assertion and 168-by-120 boundary fixtures fail against the old contract; unrelated semantic expectations remain green.
@@ -129,13 +129,13 @@ Expected generator marker: `WROTE_PARTY_FORGE_PORTFOLIO:35`. Leave the exact evi
 Run:
 
 ```powershell
-npx vitest run scripts/party-forge/party-forge-city-v3-contract.test.mjs scripts/party-forge/create-party-forge-portfolio.test.mjs
+node --test scripts/party-forge/party-forge-city-v3-contract.test.mjs scripts/party-forge/create-party-forge-portfolio.test.mjs
 npm run typecheck
 npm run lint
 git diff --check
 ```
 
-Expected: both Vitest files pass; typecheck, lint, and diff-check exit 0. Generate once more into a second fresh directory and require byte identity for both City samples. Compare parsed before/after projections after deleting only `graphs[*].placements[*].position`; require deep equality, exactly 37 changed positions in the source and runtime, 37/37 preserved IDs, 37/37 preserved edges, six degree-one charters, zero geometry diagnostics, minimum rectangle distance at least 12, minimum edge clearance at least 8, and every shared angle outside `[86,94]`.
+Expected: all 24 Node tests pass; typecheck, lint, and diff-check exit 0. Generate once more into a second fresh directory and require byte identity for both City samples. Compare parsed before/after projections after deleting only `graphs[*].placements[*].position`; require deep equality, exactly 37 changed positions in the source and runtime, 37/37 preserved IDs, 37/37 preserved edges, six degree-one charters, zero geometry diagnostics, minimum rectangle distance at least 12, minimum edge clearance at least 8, and every shared angle outside `[86,94]`.
 
 - [ ] **Step 6: Review and commit Task 1**
 
