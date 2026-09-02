@@ -8,6 +8,7 @@ func run() -> Array[String]:
 	_test_reduced_motion_setting(failures)
 	_test_accessibility_display_settings(failures)
 	_test_character_hud_background_opacity(failures)
+	_test_hud_collapse_preferences(failures)
 	_test_round_trip_and_inactive_retention(failures)
 	_test_missing_unknown_and_malformed_fields(failures)
 	_test_failed_save_preserves_previous_file(failures)
@@ -36,7 +37,7 @@ func _test_character_hud_background_opacity(failures: Array[String]) -> void:
 	TestAssertions.equal(loaded.get("character_hud_background_opacity_percent"), 35, "character HUD background opacity round trips", failures)
 	var persisted := ConfigFile.new()
 	TestAssertions.equal(persisted.load(path), OK, "character HUD settings file remains readable", failures)
-	TestAssertions.equal(int(persisted.get_value("settings", "schema_version", -1)), 2, "character HUD setting persists under schema two", failures)
+	TestAssertions.equal(int(persisted.get_value("settings", "schema_version", -1)), 3, "character HUD setting persists under schema three", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 	var legacy_path := "user://party_forge_settings_character_hud_opacity_legacy.cfg"
@@ -45,7 +46,7 @@ func _test_character_hud_background_opacity(failures: Array[String]) -> void:
 	legacy.set_value("settings", "mode", PartyForgeSettings.Mode.PLAYER_SIMULATION)
 	legacy.save(legacy_path)
 	loaded = store.load_settings(legacy_path)
-	TestAssertions.equal(loaded.schema_version, 2, "schema-one settings migrate to schema two in memory", failures)
+	TestAssertions.equal(loaded.schema_version, 3, "schema-one settings migrate to schema three in memory", failures)
 	TestAssertions.equal(loaded.get("character_hud_background_opacity_percent"), 50, "schema-one settings migrate to the 50 percent character HUD default", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy_path))
 
@@ -56,6 +57,89 @@ func _test_character_hud_background_opacity(failures: Array[String]) -> void:
 	malformed.save(malformed_path)
 	TestAssertions.equal(store.load_settings(malformed_path).get("character_hud_background_opacity_percent"), 50, "malformed character HUD opacity fails to its safe default", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(malformed_path))
+
+
+func _test_hud_collapse_preferences(failures: Array[String]) -> void:
+	var defaults := PartyForgeSettings.new()
+	var property_names: Array[String] = []
+	for property: Dictionary in defaults.get_property_list():
+		property_names.append(str(property.get("name", "")))
+	var has_hud_party_collapsed := "hud_party_collapsed" in property_names
+	var has_hud_alerts_collapsed := "hud_alerts_collapsed" in property_names
+	TestAssertions.truthy(has_hud_party_collapsed and has_hud_alerts_collapsed, "settings expose both HUD collapse preferences", failures)
+	if not has_hud_party_collapsed or not has_hud_alerts_collapsed:
+		return
+	TestAssertions.equal([defaults.hud_party_collapsed, defaults.hud_alerts_collapsed], [false, false], "HUD regions default expanded", failures)
+	var copied := defaults.copy()
+	copied.hud_party_collapsed = true
+	copied.hud_alerts_collapsed = true
+	TestAssertions.equal([copied.hud_party_collapsed, copied.hud_alerts_collapsed], [true, true], "copy retains independent HUD collapse preferences", failures)
+
+	var store := PartyForgeSettingsStore.new()
+	var path := "user://party_forge_settings_hud_collapse_v3.cfg"
+	TestAssertions.equal(store.save_settings(copied, path), "", "schema-three HUD preferences save", failures)
+	var loaded := store.load_settings(path)
+	TestAssertions.equal([loaded.schema_version, loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [3, true, true], "schema-three HUD preferences round trip", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	path = "user://party_forge_settings_hud_collapse_v3_missing.cfg"
+	var missing := ConfigFile.new()
+	missing.set_value("settings", "schema_version", 3)
+	missing.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [false, false], "schema-three missing HUD collapse preferences default expanded", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	path = "user://party_forge_settings_hud_collapse_v3_party_missing.cfg"
+	var party_missing := ConfigFile.new()
+	party_missing.set_value("settings", "schema_version", 3)
+	party_missing.set_value("settings", "hud_alerts_collapsed", true)
+	party_missing.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [false, true], "schema-three missing party collapse preference defaults expanded", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	path = "user://party_forge_settings_hud_collapse_v3_alerts_missing.cfg"
+	var alerts_missing := ConfigFile.new()
+	alerts_missing.set_value("settings", "schema_version", 3)
+	alerts_missing.set_value("settings", "hud_party_collapsed", true)
+	alerts_missing.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [true, false], "schema-three missing alerts collapse preference defaults expanded", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	path = "user://party_forge_settings_hud_collapse_unversioned.cfg"
+	var unversioned := ConfigFile.new()
+	unversioned.set_value("settings", "mode", PartyForgeSettings.Mode.DEVELOPER_MODE)
+	unversioned.set_value("settings", "party_capacity_override", 9)
+	unversioned.set_value("settings", "hud_party_collapsed", true)
+	unversioned.set_value("settings", "hud_alerts_collapsed", true)
+	unversioned.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [false, false], "unversioned files cannot opt into schema-three HUD collapse preferences", failures)
+	TestAssertions.equal([loaded.mode, loaded.party_capacity_override], [PartyForgeSettings.Mode.DEVELOPER_MODE, 9], "unversioned files retain legitimate legacy settings migration", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	for version: int in [1, 2]:
+		path = "user://party_forge_settings_hud_collapse_v%d.cfg" % version
+		var legacy := ConfigFile.new()
+		legacy.set_value("settings", "schema_version", version)
+		legacy.set_value("settings", "character_hud_background_opacity_percent", 35)
+		legacy.save(path)
+		loaded = store.load_settings(path)
+		TestAssertions.equal([loaded.schema_version, loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [3, false, false], "schema %d migrates HUD regions expanded" % version, failures)
+		TestAssertions.equal(loaded.character_hud_background_opacity_percent, 50 if version == 1 else 35, "schema %d preserves the exact opacity migration contract" % version, failures)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	path = "user://party_forge_settings_hud_collapse_malformed.cfg"
+	var malformed := ConfigFile.new()
+	malformed.set_value("settings", "schema_version", 3)
+	malformed.set_value("settings", "hud_party_collapsed", "true")
+	malformed.set_value("settings", "hud_alerts_collapsed", 1)
+	malformed.save(path)
+	loaded = store.load_settings(path)
+	TestAssertions.equal([loaded.hud_party_collapsed, loaded.hud_alerts_collapsed], [false, false], "malformed HUD collapse values fail expanded", failures)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func _test_personal_loot_controls(failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()
@@ -321,13 +405,26 @@ func _test_failed_save_preserves_previous_file(failures: Array[String]) -> void:
 	var path := "user://party_forge_settings_preserve_test.cfg"
 	var store := PartyForgeSettingsStore.new()
 	var original := PartyForgeSettings.new()
+	var property_names: Array[String] = []
+	for property: Dictionary in original.get_property_list():
+		property_names.append(str(property.get("name", "")))
+	var has_hud_party_collapsed := "hud_party_collapsed" in property_names
+	var has_hud_alerts_collapsed := "hud_alerts_collapsed" in property_names
+	TestAssertions.truthy(has_hud_party_collapsed and has_hud_alerts_collapsed, "failed promotion coverage requires both HUD collapse preferences", failures)
+	if not has_hud_party_collapsed or not has_hud_alerts_collapsed:
+		return
 	original.party_capacity_override = 8
+	original.hud_party_collapsed = true
+	original.hud_alerts_collapsed = false
 	TestAssertions.equal(store.save_settings(original, path), "", "baseline save succeeds", failures)
 	var failing_store := PartyForgeSettingsStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE)
 	var changed := original.copy()
 	changed.party_capacity_override = 24
+	changed.hud_party_collapsed = false
+	changed.hud_alerts_collapsed = true
 	TestAssertions.truthy(not failing_store.save_settings(changed, path).is_empty(), "failed promotion reports failure", failures)
 	TestAssertions.equal(store.load_settings(path).party_capacity_override, 8, "previous valid file is unchanged", failures)
+	TestAssertions.equal([store.load_settings(path).hud_party_collapsed, store.load_settings(path).hud_alerts_collapsed], [true, false], "failed promotion preserves HUD collapse preferences", failures)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func _test_failed_restore_retains_backup(failures: Array[String]) -> void:

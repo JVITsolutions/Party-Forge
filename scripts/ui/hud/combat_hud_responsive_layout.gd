@@ -34,14 +34,15 @@ class Metrics:
 		return clampi(page, 0, page_count - 1)
 
 
-static func resolve(viewport_size: Vector2i, ui_scale_percent: int, text_scale_percent: int, party_count: int) -> Metrics:
+static func resolve(viewport_size: Vector2i, ui_scale_percent: int, text_scale_percent: int, party_count: int, party_header_height: float = 0.0) -> Metrics:
 	var normalized_ui_scale := _normalized_scale(ui_scale_percent)
 	var normalized_text_scale := _normalized_scale(text_scale_percent)
 	var normalized_party_count := clampi(party_count, 1, MAX_PARTY_COUNT)
 	var rich_card_size := _resolved_rich_card_size(normalized_ui_scale, normalized_text_scale)
 	var rich_columns := _rich_columns(viewport_size, rich_card_size)
-	var rich := normalized_party_count <= 6 and _rich_followers_fit(viewport_size, normalized_party_count - 1, rich_card_size, rich_columns)
-	var visible := normalized_party_count if rich else clampi(_compact_visible_count(viewport_size, normalized_ui_scale, normalized_text_scale), 1, normalized_party_count)
+	var reserved_header := maxf(party_header_height, 0.0)
+	var rich := normalized_party_count <= 6 and _rich_followers_fit(viewport_size, normalized_party_count - 1, rich_card_size, rich_columns, reserved_header)
+	var visible := normalized_party_count if rich else clampi(_compact_visible_count(viewport_size, normalized_ui_scale, normalized_text_scale, reserved_header), 1, normalized_party_count)
 	var pages := maxi(1, ceili(float(normalized_party_count) / float(visible)))
 	return Metrics.create(Mode.RICH if rich else Mode.COMPACT, visible, rich_columns if rich else _compact_columns(viewport_size), pages)
 
@@ -56,11 +57,11 @@ static func _rich_columns(viewport_size: Vector2i, card_size: Vector2) -> int:
 	return clampi(floori((available_width + RICH_HORIZONTAL_SEPARATION) / (card_size.x + RICH_HORIZONTAL_SEPARATION)), 1, RICH_MAX_COLUMNS)
 
 
-static func _rich_followers_fit(viewport_size: Vector2i, follower_count: int, card_size: Vector2, columns: int) -> bool:
+static func _rich_followers_fit(viewport_size: Vector2i, follower_count: int, card_size: Vector2, columns: int, party_header_height: float) -> bool:
 	if follower_count <= 0:
 		return true
 	var available_width := maxf(1.0, float(viewport_size.x) * 0.5 - PARTY_REGION_HORIZONTAL_INSET)
-	var available_height := maxf(1.0, float(viewport_size.y) - PARTY_REGION_VERTICAL_INSET)
+	var available_height := _available_party_height(viewport_size, PARTY_REGION_VERTICAL_INSET, party_header_height)
 	var used_columns := mini(columns, follower_count)
 	var rows := ceili(float(follower_count) / float(columns))
 	var required_width := card_size.x * used_columns + RICH_HORIZONTAL_SEPARATION * maxi(0, used_columns - 1)
@@ -68,16 +69,20 @@ static func _rich_followers_fit(viewport_size: Vector2i, follower_count: int, ca
 	return required_width <= available_width and required_height <= available_height
 
 
-static func _compact_visible_count(viewport_size: Vector2i, ui_scale_percent: int, text_scale_percent: int) -> int:
+static func _compact_visible_count(viewport_size: Vector2i, ui_scale_percent: int, text_scale_percent: int, party_header_height: float) -> int:
 	var ui_scale := float(ui_scale_percent) / 100.0
 	var text_scale := float(text_scale_percent) / 100.0
 	var row_scale := maxf(ui_scale, text_scale)
-	var available_height := maxf(1.0, float(viewport_size.y) - 132.0 * ui_scale)
+	var available_height := _available_party_height(viewport_size, 132.0 * ui_scale, party_header_height)
 	var row_height := 84.0 * row_scale
 	var rows := clampi(floori(available_height / row_height), MIN_COMPACT_ROWS, MAX_COMPACT_ROWS)
 	if viewport_size.y <= 720 and text_scale_percent >= 150:
-		rows = mini(rows, 3)
+		rows = mini(rows, 2 if party_header_height > 0.0 else 3)
 	return rows * _compact_columns(viewport_size)
+
+
+static func _available_party_height(viewport_size: Vector2i, base_inset: float, party_header_height: float) -> float:
+	return maxf(1.0, float(viewport_size.y) - base_inset - maxf(party_header_height, 0.0) - LivingForgeTokens.spacing(&"standard"))
 
 
 static func _compact_columns(viewport_size: Vector2i) -> int:

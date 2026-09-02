@@ -43,6 +43,8 @@ func run() -> Array[String]:
 	TestAssertions.truthy(panel.get_node_or_null("ReturnToCombat") == null, "terminal panel has no combat route", failures)
 	_test_composite_availability(panel, projection, failures)
 	_test_grouped_exact_consequences(panel, failures)
+	_test_unused_capacity_warning_contract(panel, failures)
+	_test_primary_action_theme_contracts(panel, failures)
 	_test_high_contrast_semantics(panel, failures)
 	panel.free()
 	return failures
@@ -86,6 +88,51 @@ func _test_grouped_exact_consequences(panel: Control, failures: Array[String]) -
 	var lost_list := (panel.get_node("Frame/Content/Body/Sections/SummaryLists/LostItems") as Label).text
 	TestAssertions.truthy(automatic_list.contains("Leader Equipment") and automatic_list.contains("slot"), "automatic consequence list includes exact owner container and slot", failures)
 	TestAssertions.truthy(lost_list.contains("Run Inventory") and lost_list.contains("slot"), "lost consequence list includes exact owner container and slot; actual=%s" % lost_list, failures)
+
+
+func _test_unused_capacity_warning_contract(panel: Control, failures: Array[String]) -> void:
+	var frame := panel.get_node("UnusedCapacityWarning/Frame") as PanelContainer
+	var padding := panel.get_node("UnusedCapacityWarning/Frame/Padding") as MarginContainer
+	var layout := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout") as VBoxContainer
+	var title := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Title") as Label
+	var message := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Message") as Label
+	var actions := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions") as HBoxContainer
+	var back := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button
+	var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
+	TestAssertions.equal(frame.get_child_count(), 1, "unused-capacity Frame has one container layout owner", failures)
+	TestAssertions.truthy(padding != null and padding.get_parent() == frame and padding.get_child_count() == 1 and layout.get_parent() == padding, "unused-capacity Frame has one padded vertical layout chain", failures)
+	TestAssertions.truthy(layout != null and title.get_parent() == layout and message.get_parent() == layout and actions.get_parent() == layout, "warning Title, Message, and Actions share one vertical-flow owner", failures)
+	TestAssertions.equal(title.accessibility_name, "ACCEPT UNUSED CAPACITY?", "warning title exposes exact readable label", failures)
+	TestAssertions.truthy(not message.text.strip_edges().is_empty() and message.autowrap_mode != TextServer.AUTOWRAP_OFF, "warning body has readable wrapping consequence copy", failures)
+	TestAssertions.equal(back.text, "BACK", "warning safe action keeps exact visible label", failures)
+	TestAssertions.equal(acknowledge.text, "ACCEPT CONSEQUENCE", "warning primary action keeps exact visible label", failures)
+	TestAssertions.equal(back.accessibility_name, "Back", "warning safe action exposes exact accessibility label", failures)
+	TestAssertions.equal(acknowledge.accessibility_name, "Accept Consequence", "warning primary action exposes exact accessibility label", failures)
+	var grammar_cases: Array[Dictionary] = [
+		{"slots": 1, "lost": 1, "expected": "You are leaving 1 extraction slot unused. 1 item will be lost."},
+		{"slots": 2, "lost": 1, "expected": "You are leaving 2 extraction slots unused. 1 item will be lost."},
+		{"slots": 1, "lost": 2, "expected": "You are leaving 1 extraction slot unused. 2 items will be lost."},
+		{"slots": 2, "lost": 2, "expected": "You are leaving 2 extraction slots unused. 2 items will be lost."},
+	]
+	for grammar_case: Dictionary in grammar_cases:
+		var expected := String(grammar_case["expected"])
+		var actual := String(panel.call(&"_unused_capacity_warning_text", int(grammar_case["slots"]), int(grammar_case["lost"])))
+		TestAssertions.equal(actual, expected, "warning body pluralizes slot and item nouns independently", failures)
+
+
+func _test_primary_action_theme_contracts(panel: Control, failures: Array[String]) -> void:
+	var settings := PartyForgeSettings.new()
+	panel.call(&"apply_visual_settings", settings)
+	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
+	_assert_shared_primary_action(confirm, "Confirm Extraction", failures)
+	var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
+	_assert_shared_primary_action(acknowledge, "Accept Consequence", failures)
+
+
+func _assert_shared_primary_action(button: Button, label: String, failures: Array[String]) -> void:
+	TestAssertions.equal(button.theme_type_variation, &"LivingForgePrimaryButton", "%s uses the shared Primary variation" % label, failures)
+	TestAssertions.truthy(not button.has_theme_stylebox_override(&"focus"), "%s has no local focus StyleBox override" % label, failures)
+	TestAssertions.truthy(not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus font override" % label, failures)
 
 func _test_high_contrast_semantics(panel: Control, failures: Array[String]) -> void:
 	var settings := PartyForgeSettings.new()

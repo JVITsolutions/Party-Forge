@@ -81,6 +81,7 @@ func _test_targeted_confirmation_uses_exact_member_and_preview(failures: Array[S
 	member_24.pressed.emit()
 	TestAssertions.equal(panel.get("_state"), CONFIRMING, "recipient choice enters CONFIRMING", failures)
 	TestAssertions.truthy((panel.get_node("Frame/Content/Confirmation") as Control).visible, "targeted confirmation is visible", failures)
+	_assert_shared_primary_action(panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button, "Level-up Confirm", failures)
 	var exact_effect := (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Effect") as Label).text
 	TestAssertions.truthy("->" in exact_effect, "targeted confirmation shows exact before-to-after preview", failures)
 	TestAssertions.truthy("Member 24" in (panel.get_node("Frame/Content/Confirmation/BodyScroll/Body/Recipient") as Label).text, "confirmation names the exact recipient", failures)
@@ -146,6 +147,7 @@ func _test_empty_offer_has_reason_and_recovery(failures: Array[String]) -> void:
 	var recovery := panel.get_node("Frame/Content/Offer/RetryOffers") as Button
 	TestAssertions.equal(error.text, "No eligible upgrades remain.", "empty offer shows the authoritative reason", failures)
 	TestAssertions.truthy(error.visible and recovery.visible, "empty offer exposes recovery instead of an inert panel", failures)
+	_assert_shared_primary_action(recovery, "Retry Offers", failures)
 	panel.call(&"_on_recovery_pressed")
 	TestAssertions.equal(retries[0], 1, "empty-offer recovery emits once", failures)
 	_cleanup(fixture)
@@ -239,3 +241,9 @@ func _card(panel: LevelUpPanel, index: int) -> UpgradeCard:
 func _cleanup(fixture: Dictionary) -> void:
 	(fixture.panel as LevelUpPanel).free()
 	(fixture.party as PartyManager).free()
+
+
+func _assert_shared_primary_action(button: Button, label: String, failures: Array[String]) -> void:
+	TestAssertions.equal(button.theme_type_variation, &"LivingForgePrimaryButton", "%s uses the shared Primary variation" % label, failures)
+	TestAssertions.truthy(not button.has_theme_stylebox_override(&"focus"), "%s has no local focus StyleBox override" % label, failures)
+	TestAssertions.truthy(not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus font override" % label, failures)

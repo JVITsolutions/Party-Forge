@@ -1,5 +1,8 @@
 extends SceneTree
 
+const COMBAT_HUD_UNIT_SUITE := preload("res://tests/unit/test_combat_hud.gd")
+const SCRIPT_ERROR_CAPTURE := preload("res://tests/support/test_script_error_capture.gd")
+
 
 class TestRun:
 	extends Node
@@ -55,13 +58,484 @@ func _run() -> void:
 	_hud.connect("ledger_requested", _on_ledger_requested)
 	await process_frame
 	await process_frame
+	var unit_suite := COMBAT_HUD_UNIT_SUITE.new()
+	for failure: String in unit_suite.run_scene_tree_focus_hydration_contract(_hud, _viewport):
+		_failures.append("scene-tree unit contract: %s" % failure)
+	await process_frame
+	await _exercise_collapsed_summary_focus_contract()
 	await _exercise_no_focus_theft_and_page_navigation()
 	await _exercise_keyboard_mouse_controller_routes()
 	await _exercise_complete_tray_focus_and_cancel()
 	await _exercise_nested_pause_and_resolved_fallback()
 	await _exercise_child_modal_refresh_ownership()
+	await _exercise_terminal_rebuild_focus_suspension()
+	await _exercise_terminal_presentation_ineligibility()
+	await _exercise_freed_collapsed_rebuild_restoration()
+	await _exercise_region_focus_traversal_and_motion()
+	await _exercise_terminal_region_suspension_handoff()
 	_cleanup()
 	_finish()
+
+
+func _exercise_collapsed_summary_focus_contract() -> void:
+	_hud.apply_collapse_preferences(true, true)
+	await process_frame
+	var party_region := _hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	(_fixture.health_by_member[1] as HealthComponent).apply_damage(10.0)
+	await process_frame
+	_assert(_region_focus_modes_are_none(party_region), "collapsed Party live-value refresh immediately reapplies suspension without restoring hidden focus")
+	_hud.apply_collapse_preferences(false, true)
+	await process_frame
+	var party_header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var tray_action := _hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	party_header.grab_focus()
+	await process_frame
+	_assert(_viewport.gui_get_focus_owner() == party_header, "collapsed-summary fixture establishes a real Party-header focus owner")
+	(_fixture.health_by_member[12] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	_assert(
+		_hud.alerts_collapsed()
+		and not alerts_content.visible
+		and _viewport.gui_get_focus_owner() == party_header,
+		"a newly appearing collapsed alert updates without expanding or stealing real viewport focus",
+	)
+	_assert(tray_action.visible and not tray_action.disabled and tray_action.focus_mode == Control.FOCUS_ALL, "new collapsed alert exposes an eligible tray action")
+	tray_action.grab_focus()
+	await process_frame
+	var descriptor := _hud.focus_descriptor_for(tray_action)
+	party_header.grab_focus()
+	await process_frame
+	var restored := _hud.restore_focus_descriptor(descriptor)
+	await process_frame
+	_assert(
+		restored
+		and descriptor == {"kind": &"named", "named_control": &"alerts_tray_action"}
+		and _viewport.gui_get_focus_owner() == tray_action,
+		"alerts_tray_action named descriptor round-trips the exact real focus owner",
+	)
+	(_fixture.health_by_member[12] as HealthComponent).heal(100.0)
+	await process_frame
+	_assert(
+		not tray_action.visible
+		and tray_action.disabled
+		and tray_action.focus_mode == Control.FOCUS_NONE
+		and not tray_action.has_focus()
+		and _viewport.gui_get_focus_owner() != tray_action,
+		"all-clear transition releases real tray-action focus before removing eligibility",
+	)
+	_hud.apply_collapse_preferences(false, false)
+	await process_frame
+
+
+func _exercise_region_focus_traversal_and_motion() -> void:
+	var party_header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := _hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var leader := _hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+	var party_region := _hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var overflow := _hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray_action := _hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	var motion_settings := PartyForgeSettings.new()
+	motion_settings.reduced_motion = true
+	_hud.apply_visual_settings(motion_settings)
+	await process_frame
+
+
+	var exact_member := _member_control(2)
+	_assert(exact_member != null, "Party focus fixture exposes member two")
+	if exact_member == null:
+		return
+	exact_member.grab_focus()
+	await process_frame
+	var leader_modulate := leader.modulate
+	var roster_modulate := party_region.modulate
+	await _click_mouse(party_header)
+	_assert(_hud.party_collapsed() and party_header.has_focus(), "mouse collapse moves hidden Party descendant focus to PartyHeader")
+	_assert(not leader.visible and not party_region.visible, "Party content visibility changes atomically on collapse")
+	_assert(leader.modulate == leader_modulate and party_region.modulate == roster_modulate, "reduced motion never animates Party content opacity on collapse")
+	_assert(_disclosure_tween_for(&"party") == null and is_equal_approx(_hud.disclosure_rotation_for(&"party"), 0.0), "reduced motion reaches collapsed Party glyph rotation in the same frame with no Tween")
+	await _click_mouse(party_header)
+	await process_frame
+	var rebuilt_member := _member_control(2)
+	var rebuilt_focus_owner := _viewport.gui_get_focus_owner() as Control
+	_assert(not _hud.party_collapsed() and rebuilt_member != null and rebuilt_focus_owner == rebuilt_member and rebuilt_focus_owner.is_in_group(&"combat_hud_member") and int(rebuilt_focus_owner.get_meta("member_id", 0)) == 2, "mouse expansion restores viewport focus to the rebuilt semantic member two")
+	_assert(leader.modulate == leader_modulate and party_region.modulate == roster_modulate, "reduced motion never animates Party content opacity on expand")
+	_assert(_disclosure_tween_for(&"party") == null and is_equal_approx(_hud.disclosure_rotation_for(&"party"), PI / 2.0), "reduced motion reaches expanded Party glyph rotation in the same frame with no Tween actual=%s" % _hud.disclosure_rotation_for(&"party"))
+	await _press_controller_direction(JOY_BUTTON_DPAD_UP)
+	_assert(party_header.has_focus(), "controller D-pad reaches PartyHeader from a Party descendant")
+
+	for member_id: int in range(2, 8):
+		(_fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	var first_alert := alerts_content.get_child(0) as Control
+	var exact_inspect := first_alert.get_node("Surface/Content/Actions/Inspect") as Button
+	exact_inspect.grab_focus()
+	await process_frame
+	await _press_keyboard(KEY_ENTER, alerts_header)
+	_assert(_hud.alerts_collapsed() and alerts_header.has_focus(), "keyboard Alerts collapse moves hidden Inspect focus to Alerts Header")
+	_assert(not alerts_content.visible and not overflow.visible, "Alerts cards and overflow hide atomically")
+	_assert(_region_focus_modes_are_none(alerts_content) and overflow.focus_mode == Control.FOCUS_NONE, "collapsed Alerts descendants are unreachable with exact FOCUS_NONE")
+	await _press_keyboard(KEY_ENTER)
+	await process_frame
+	_assert(not _hud.alerts_collapsed() and exact_inspect.has_focus(), "keyboard Alerts expansion restores the exact surviving Inspect action")
+
+	exact_inspect.grab_focus()
+	await process_frame
+	await _press_keyboard(KEY_ENTER, alerts_header)
+	var removed_member_id := int(first_alert.get_meta("member_id", 0))
+	exact_inspect = null
+	first_alert = null
+	_replace_with_healthy_actor(removed_member_id)
+	await process_frame
+	await _press_keyboard(KEY_ENTER)
+	await process_frame
+	var fallback := _viewport.gui_get_focus_owner() as Control
+	_assert(not _hud.alerts_collapsed() and fallback != null and (alerts_content.is_ancestor_of(fallback) or fallback == overflow or fallback == alerts_header), "resolved collapsed alert expands to the first surviving action, Overflow, or Header")
+
+	party_header.grab_focus()
+	await process_frame
+	await _press_controller_direction(JOY_BUTTON_DPAD_RIGHT)
+	_assert(alerts_header.has_focus(), "controller D-pad reaches Alerts Header from PartyHeader")
+	await _press_controller_accept()
+	_assert(_hud.alerts_collapsed(), "controller accept toggles Alerts collapse")
+	await _press_controller_direction(JOY_BUTTON_DPAD_DOWN)
+	_assert(tray_action.has_focus(), "controller D-pad reaches AlertsTrayAction from collapsed Alerts Header")
+	await _press_controller_accept()
+	var tray := _hud.get_node("CombatAlertTray") as CombatAlertTray
+	_assert(tray.visible and _focus_within(tray), "controller reaches AlertsTrayAction and accept opens the tray")
+	await _press_controller_cancel()
+	_assert(not tray.visible and tray_action.has_focus(), "controller Cancel closes the tray to AlertsTrayAction")
+
+	var modal_close := tray.get_node("Overlay/Frame/Layout/Close") as Button
+	tray_action.pressed.emit()
+	await process_frame
+	modal_close.grab_focus()
+	await process_frame
+	_hud.apply_collapse_preferences(true, true)
+	(_fixture.health_by_member[8] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	_assert(tray.visible and _focus_within(tray), "collapsed summary refresh and hydration preserve topmost tray modal focus")
+	await _press_controller_cancel()
+	var external := Button.new()
+	external.name = "ExternalFocusOwner"
+	external.focus_mode = Control.FOCUS_ALL
+	_viewport.add_child(external)
+	external.grab_focus()
+	await process_frame
+	_hud.apply_collapse_preferences(false, false)
+	await process_frame
+	_assert(external.has_focus(), "programmatic expansion hydration never steals external viewport focus")
+	_hud.apply_collapse_preferences(true, true)
+	await process_frame
+	_assert(external.has_focus(), "programmatic collapse hydration never steals external viewport focus")
+	external.free()
+
+	exact_member = null
+	motion_settings.reduced_motion = false
+	motion_settings.hud_party_collapsed = true
+	motion_settings.hud_alerts_collapsed = true
+	_hud.apply_visual_settings(motion_settings)
+	await process_frame
+	_assert(_region_focus_modes_are_none(party_region), "collapsed Party dynamic rebuild keeps every live descendant suspended exactly once violations=%s" % [str(_region_focus_mode_violations(party_region))])
+	var content_position := alerts_content.position
+	var content_modulate := alerts_content.modulate
+	alerts_header.pressed.emit()
+	var normal_tween := _disclosure_tween_for(&"alerts")
+	_assert(normal_tween != null and normal_tween.is_valid(), "normal motion creates an active glyph-only disclosure Tween")
+	_assert(alerts_content.position == content_position and alerts_content.modulate == content_modulate, "normal disclosure motion never animates alert content position or opacity")
+	await process_frame
+	alerts_header.pressed.emit()
+	await process_frame
+	_hud.apply_collapse_preferences(false, false)
+	await process_frame
+
+
+func _exercise_terminal_rebuild_focus_suspension() -> void:
+	var prior_member_id := 3
+	var prior_member := _member_control(prior_member_id)
+	_assert(prior_member != null, "terminal rebuild fixture exposes a prior member focus owner")
+	if prior_member == null:
+		return
+	prior_member.grab_focus()
+	await process_frame
+	var prior_weak: WeakRef = weakref(prior_member)
+	prior_member = null
+	var script_errors := SCRIPT_ERROR_CAPTURE.new()
+	OS.add_logger(script_errors)
+	_hud.show_terminal_extraction(_terminal_projection())
+	await process_frame
+	await process_frame
+	var terminal := _hud.get_node("TerminalExtraction") as TerminalExtractionPanel
+	_assert(terminal.visible and _focus_within(terminal), "Terminal Extraction owns real viewport focus before HUD rebuild")
+	_viewport.size = Vector2i(1280, 720)
+	_hud.call("_refresh_projection", true)
+	(_fixture.health_by_member[9] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	await process_frame
+	await process_frame
+	_assert(prior_weak.get_ref() == null, "terminal viewport change performs a structural member-control rebuild")
+	var escaped := _terminal_focusable_hud_descendants(terminal)
+	_assert(escaped.is_empty(), "new HUD descendants remain unreachable behind Terminal Extraction controls=%s" % [str(escaped)])
+	_assert(_terminal_suspension_entries_are_live_unique(), "terminal suspension tracks every live rebuilt control once and discards invalid entries")
+	_assert(_focus_within(terminal), "terminal keeps real viewport focus after member and alert rebuilds")
+	_hud.hide_terminal_extraction()
+	await process_frame
+	await process_frame
+	OS.remove_logger(script_errors)
+	var captured := script_errors.drain_after_detach()
+	var restored := _viewport.gui_get_focus_owner() as Control
+	_assert(captured.is_empty(), "terminal rebuild and close produce no stale-reference script errors: %s" % [captured])
+	_assert(restored != null and restored.is_in_group(&"combat_hud_member") and int(restored.get_meta("member_id", 0)) == prior_member_id, "terminal close restores the valid rebuilt member descriptor")
+	_assert(restored != null and restored.focus_mode == Control.FOCUS_ALL, "terminal close restores only the valid rebuilt member focus mode")
+	_viewport.size = Vector2i(1920, 1080)
+	await process_frame
+	await process_frame
+
+
+func _exercise_freed_collapsed_rebuild_restoration() -> void:
+	var header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var member_id := 4
+	var member := _member_control(member_id)
+	_assert(member != null, "freed collapsed rebuild fixture exposes member four")
+	if member == null:
+		return
+	member.grab_focus()
+	await process_frame
+	header.pressed.emit()
+	await process_frame
+	var member_weak: WeakRef = weakref(member)
+	member = null
+	var script_errors := SCRIPT_ERROR_CAPTURE.new()
+	OS.add_logger(script_errors)
+	_hud.call("_clear_member_controls")
+	_assert(member_weak.get_ref() == null, "collapsed presentation clear frees the descriptor's original control")
+	_hud.call("_rebuild_member_controls")
+	header.pressed.emit()
+	await process_frame
+	await process_frame
+	OS.remove_logger(script_errors)
+	var captured := script_errors.drain_after_detach()
+	var restored := _viewport.gui_get_focus_owner() as Control
+	_assert(captured.is_empty(), "collapsed clear/rebuild/expand performs no freed-instance cast or access: %s" % [captured])
+	_assert(restored != null and restored.is_in_group(&"combat_hud_member") and int(restored.get_meta("member_id", 0)) == member_id, "collapsed expansion restores the stable descriptor to the rebuilt member")
+
+
+func _exercise_terminal_region_suspension_handoff() -> void:
+	_hud.apply_collapse_preferences(false, false)
+	var reduced_motion := PartyForgeSettings.new()
+	reduced_motion.reduced_motion = true
+	_hud.apply_visual_settings(reduced_motion)
+	var party_header := _hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	party_header.grab_focus()
+	await process_frame
+	var alerts_header := _hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var party_region := _hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var member := _member_control(4)
+	var alert_card := alerts_content.get_child(0) as Control
+	var alert_stable_id := StringName(alert_card.get_meta(&"stable_alert_id", &""))
+	var alert_inspect := alert_card.get_node("Surface/Content/Actions/Inspect") as Button
+	_assert(member != null and member.focus_mode == Control.FOCUS_ALL, "terminal region handoff fixture starts with an eligible Party descendant")
+	_assert(alert_inspect.visible and not alert_inspect.disabled and alert_inspect.focus_mode == Control.FOCUS_ALL, "terminal region handoff fixture starts with an eligible Alerts descendant")
+	member.grab_focus()
+	await process_frame
+	alert_inspect.grab_focus()
+	await process_frame
+	member.grab_focus()
+	await process_frame
+	member = null
+	alert_inspect = null
+	alert_card = null
+	_hud.show_terminal_extraction(_terminal_projection())
+	await process_frame
+	await process_frame
+	var terminal := _hud.get_node("TerminalExtraction") as TerminalExtractionPanel
+	_hud.apply_collapse_preferences(true, true)
+	await process_frame
+	_assert(_focus_within(terminal), "programmatic Party and Alerts collapse preserves real terminal focus")
+	_assert(_hud.party_collapsed() and _hud.alerts_collapsed(), "both regions collapse behind Terminal Extraction")
+	_hud.hide_terminal_extraction()
+	await process_frame
+	await process_frame
+	_assert(_region_focus_modes_are_none(party_region) and _region_focus_modes_are_none(alerts_content), "terminal close leaves both still-collapsed regions unreachable")
+	party_header.pressed.emit()
+	await process_frame
+	await process_frame
+	var expanded_member := _member_control(4)
+	_assert(expanded_member != null and expanded_member.focus_mode == Control.FOCUS_ALL, "Party expansion recovers the surviving member's original eligible focus mode after terminal handoff")
+	_assert(_viewport.gui_get_focus_owner() == expanded_member, "Party expansion restores the exact saved local member descriptor after terminal handoff")
+	alerts_header.pressed.emit()
+	await process_frame
+	await process_frame
+	var expanded_inspect := _hud.call("_alert_action_control", alert_stable_id, &"inspect") as Button
+	_assert(expanded_inspect != null and expanded_inspect.focus_mode == Control.FOCUS_ALL, "Alerts expansion recovers the surviving Inspect action's original eligible focus mode after terminal handoff")
+	_assert(_viewport.gui_get_focus_owner() == expanded_inspect, "Alerts expansion restores the exact saved local alert descriptor after terminal handoff")
+	var second_member := _member_control(5)
+	second_member.grab_focus()
+	await process_frame
+	_hud.show_terminal_extraction(_terminal_projection())
+	await process_frame
+	await process_frame
+	_hud.apply_collapse_preferences(true, true)
+	_hud.apply_collapse_preferences(false, false)
+	await process_frame
+	_assert(_focus_within(terminal), "collapse and expansion before terminal close preserve real terminal focus")
+	var expanded_behind_terminal_member := _member_control(5)
+	_assert(expanded_behind_terminal_member != null and expanded_behind_terminal_member.focus_mode == Control.FOCUS_NONE and expanded_inspect.focus_mode == Control.FOCUS_NONE, "rebuilt Party and surviving Alerts controls expanded behind the terminal remain suspended until terminal close")
+	_assert(_focus_suspension_ownership_is_unique(), "expanded-behind-terminal controls have exactly one suspension owner")
+	_hud.hide_terminal_extraction()
+	await process_frame
+	await process_frame
+	var restored_second_member := _member_control(5)
+	var restored_second_inspect := _hud.call("_alert_action_control", alert_stable_id, &"inspect") as Button
+	_assert(restored_second_member != null and restored_second_member.focus_mode == Control.FOCUS_ALL, "terminal close after Party expansion restores the surviving member mode")
+	_assert(restored_second_inspect != null and restored_second_inspect.focus_mode == Control.FOCUS_ALL, "terminal close after Alerts expansion restores the surviving Inspect mode")
+	_assert(_viewport.gui_get_focus_owner() == restored_second_member, "terminal close after region expansion restores the exact terminal-prior member")
+	party_header.grab_focus()
+	await process_frame
+
+
+func _exercise_terminal_presentation_ineligibility() -> void:
+	_hud.apply_collapse_preferences(false, false)
+	for health_value: Variant in (_fixture.health_by_member as Dictionary).values():
+		(health_value as HealthComponent).heal(1000.0)
+	for member_id: int in range(2, 13):
+		(_fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
+	await process_frame
+	await process_frame
+	var tray_action := _hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	var overflow := _hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var alerts_content := _hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var first_alert := alerts_content.get_child(0) as Control
+	var first_inspect := first_alert.get_node("Surface/Content/Actions/Inspect") as Button
+	_assert(tray_action.visible and not tray_action.disabled and tray_action.focus_mode == Control.FOCUS_ALL, "terminal inverse fixture starts with an eligible AlertsTrayAction")
+	_assert(overflow.visible and not overflow.disabled and overflow.focus_mode == Control.FOCUS_ALL, "terminal inverse fixture starts with an eligible alert overflow action")
+	_assert(first_inspect.visible and not first_inspect.disabled and first_inspect.focus_mode == Control.FOCUS_ALL, "terminal inverse fixture starts with an eligible alert descendant")
+	tray_action.grab_focus()
+	await process_frame
+	var inspect_weak: WeakRef = weakref(first_inspect)
+	first_inspect = null
+	first_alert = null
+	_hud.show_terminal_extraction(_terminal_projection())
+	await process_frame
+	await process_frame
+	var terminal := _hud.get_node("TerminalExtraction") as TerminalExtractionPanel
+	for health_value: Variant in (_fixture.health_by_member as Dictionary).values():
+		(health_value as HealthComponent).heal(1000.0)
+	await process_frame
+	await process_frame
+	await process_frame
+	_assert(_focus_within(terminal), "Terminal Extraction keeps viewport focus while alerts become ineligible")
+	_assert(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE, "live presentation makes AlertsTrayAction ineligible behind the terminal")
+	_assert(not overflow.visible and overflow.disabled and overflow.focus_mode == Control.FOCUS_NONE, "live presentation makes overflow ineligible behind the terminal")
+	_assert(inspect_weak.get_ref() == null, "resolved alert descendant is freed behind the terminal")
+	_hud.hide_terminal_extraction()
+	await process_frame
+	await process_frame
+	_assert(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE and not tray_action.has_focus(), "terminal close never resurrects stale AlertsTrayAction focus eligibility")
+	_assert(not overflow.visible and overflow.disabled and overflow.focus_mode == Control.FOCUS_NONE and not overflow.has_focus(), "terminal close never resurrects stale overflow focus eligibility")
+	_assert(_region_focus_modes_are_none(alerts_content), "terminal close leaves resolved alert descendants unreachable")
+
+
+func _terminal_focusable_hud_descendants(terminal: Control) -> Array[String]:
+	var escaped: Array[String] = []
+	for node: Node in _hud.find_children("*", "Control", true, false):
+		var control := node as Control
+		if control == terminal or terminal.is_ancestor_of(control):
+			continue
+		if not control.is_visible_in_tree() or (control is BaseButton and (control as BaseButton).disabled):
+			continue
+		if control.focus_mode != Control.FOCUS_NONE:
+			escaped.append(String(control.get_path()))
+	return escaped
+
+
+func _terminal_suspension_entries_are_live_unique() -> bool:
+	var entries: Variant = _hud.get("_terminal_suspended_focus_modes")
+	if not entries is Array:
+		return false
+	var seen: Dictionary = {}
+	for entry_value: Variant in entries as Array:
+		if not entry_value is Dictionary:
+			return false
+		var raw: Variant = (entry_value as Dictionary).get("control")
+		if not is_instance_valid(raw):
+			return false
+		var control := raw as Control
+		if control == null or seen.has(control.get_instance_id()):
+			return false
+		seen[control.get_instance_id()] = true
+	return true
+
+
+func _focus_suspension_ownership_is_unique() -> bool:
+	var seen: Dictionary = {}
+	for entries_value: Variant in [
+		_hud.get("_terminal_suspended_focus_modes"),
+		(_hud.get("_collapsed_focus_modes") as Dictionary).get(&"party", []),
+		(_hud.get("_collapsed_focus_modes") as Dictionary).get(&"alerts", []),
+	]:
+		if not entries_value is Array:
+			return false
+		for entry_value: Variant in entries_value as Array:
+			if not entry_value is Dictionary:
+				return false
+			var raw_control: Variant = (entry_value as Dictionary).get("control")
+			if not is_instance_valid(raw_control):
+				continue
+			var control := raw_control as Control
+			if control == null or seen.has(control.get_instance_id()):
+				return false
+			seen[control.get_instance_id()] = true
+	return true
+
+
+func _terminal_projection() -> TerminalExtractionProjection:
+	var item := TerminalExtractionItemProjection.create_with_source(
+		"task6-terminal-item",
+		"Twin Band",
+		"Common",
+		&"common",
+		"Fighter · Member 3",
+		"Fighter Equipment",
+		false,
+		false,
+		true,
+		{"name": "Twin Band", "instance_id": "task6-terminal-item"},
+		[],
+		3,
+		"Fighter",
+		&"run-equipment-003",
+		0,
+	)
+	return TerminalExtractionProjection.create([], [item], 1, [], [item.item_id], [], "", true)
+
+
+func _region_focus_modes_are_none(root_control: Control) -> bool:
+	return _region_focus_mode_violations(root_control).is_empty()
+
+
+func _region_focus_mode_violations(root_control: Control) -> Array[String]:
+	var violations: Array[String] = []
+	if root_control.focus_mode != Control.FOCUS_NONE:
+		violations.append(String(root_control.get_path()))
+	for node: Node in root_control.find_children("*", "Control", true, false):
+		if (node as Control).focus_mode != Control.FOCUS_NONE:
+			violations.append(String(node.get_path()))
+	return violations
+
+
+func _focus_within(scope: Node) -> bool:
+	var owner := _viewport.gui_get_focus_owner()
+	return owner != null and (owner == scope or scope.is_ancestor_of(owner))
+
+
+func _disclosure_tween_for(region: StringName) -> Tween:
+	var value: Variant = _hud.get("_disclosure_tweens")
+	if not value is Dictionary:
+		return null
+	return (value as Dictionary).get(region) as Tween
 
 
 func _exercise_no_focus_theft_and_page_navigation() -> void:
@@ -379,12 +853,27 @@ func _member_control(member_id: int) -> Control:
 	return null
 
 
-func _press_keyboard(keycode: Key) -> void:
+func _press_keyboard(keycode: Key, focus_before: Control = null) -> void:
+	if focus_before != null:
+		focus_before.grab_focus()
+		await process_frame
 	var event := InputEventKey.new()
 	event.keycode = keycode
 	event.pressed = true
 	_viewport.push_input(event)
 	var released := event.duplicate() as InputEventKey
+	released.pressed = false
+	_viewport.push_input(released)
+	await process_frame
+
+
+func _press_controller_direction(button_index: JoyButton) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = 0
+	event.button_index = button_index
+	event.pressed = true
+	_viewport.push_input(event)
+	var released := event.duplicate() as InputEventJoypadButton
 	released.pressed = false
 	_viewport.push_input(released)
 	await process_frame

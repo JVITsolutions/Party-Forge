@@ -5,6 +5,9 @@ const MANIFEST_NAME := "manifest.json"
 const MANIFEST_SCHEMA_VERSION := 2
 const VERIFICATION_PATH := "docs/verification/2026-08-29-living-forge-hud-level-up-results.md"
 const RUNNER_PATH := "tests/integration/living_forge_combat_loop_visual_evidence_runner.gd"
+const CAPTURE_ORCHESTRATOR_PATH := "tools/validation/capture_living_forge_combat_loop.ps1"
+const CAPTURE_PROVENANCE_SCHEMA_VERSION := 1
+const EXPECTED_GODOT_VERSION := "4.7.1.stable.mono.official.a13da4feb"
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
 const LEVEL_UP_SCENE := preload("res://scenes/ui/level_up_panel.tscn")
 const EXTRACTION_SCENE := preload("res://scenes/ui/run_result/terminal_extraction_panel.tscn")
@@ -59,6 +62,19 @@ const CAPTURES: Array[String] = [
 	"extraction-detail-720p-ui-150-text-150.png",
 	"result-expanded-detail-ui-150-text-150.png",
 	"result-expanded-detail-ui-80-text-150.png",
+	"hud-party-collapsed-6-clear.png",
+	"hud-party-collapsed-24-severity.png",
+	"hud-alerts-collapsed-dead-focus.png",
+	"hud-alerts-collapsed-all-clear.png",
+	"hud-both-collapsed-720p-text-150.png",
+	"hud-both-collapsed-high-contrast.png",
+	"hud-alerts-collapsed-controller-tray-focus.png",
+	"hud-both-collapsed-reduced-motion.png",
+	"lobby-start-run-primary-focus.png",
+	"extraction-confirm-primary-focus.png",
+	"extraction-consequence-primary-focus.png",
+	"level-up-confirm-primary-focus.png",
+	"result-primary-retry-focus.png",
 ]
 
 const CAPTURE_STATES: Array[String] = [
@@ -107,6 +123,19 @@ const CAPTURE_STATES: Array[String] = [
 	"720p extraction detail at UI 150 and text 150",
 	"720p expanded result detail at UI 150 and text 150",
 	"720p expanded result detail at UI 80 and text 150",
+	"Party collapsed with six healthy members",
+	"Party collapsed with twenty-four members and dead, downed, and critical counts",
+	"Alerts collapsed with DEAD highest summary",
+	"Alerts collapsed with ALL CLEAR",
+	"Party and Alerts collapsed at 720p and text scale 150",
+	"Party and Alerts collapsed in high contrast",
+	"Alerts collapsed with direct controller tray action focused",
+	"Party and Alerts collapsed settled with reduced motion",
+	"Start Run shared primary focus style",
+	"Confirm Extraction shared primary focus style",
+	"Accept Consequence shared primary focus style",
+	"Level-up Confirm shared primary focus style",
+	"Result Retry Resolution shared primary focus style",
 ]
 
 const CAPTURE_FOCUS_TARGETS: Array[String] = [
@@ -122,6 +151,9 @@ const CAPTURE_FOCUS_TARGETS: Array[String] = [
 	"pause:retry_return_to_forge", "lobby:mage", "lobby:first_class",
 	"hud:alert_inspect", "confirmation:cancel", "extraction:show_auto",
 	"extraction_detail:close", "result:expanded_row", "result:expanded_row",
+	"hud:party_header", "hud:party_header", "hud:alerts_header", "hud:alerts_header",
+	"hud:party_header", "hud:alerts_header", "hud:alerts_tray_action", "hud:party_header",
+	"lobby:start", "extraction:confirm", "extraction:acknowledge", "level_up:confirm", "result:retry_resolution",
 ]
 
 # Metadata is index-aligned with CAPTURES so each filename is declared exactly once.
@@ -171,28 +203,45 @@ const CAPTURE_METADATA: Array[Dictionary] = [
 	{"surface":"extraction-detail","width":1280,"height":720,"ui":150,"text":150,"contrast":false,"motion":true,"input":"keyboard"},
 	{"surface":"result-detail","width":1280,"height":720,"ui":150,"text":150,"contrast":false,"motion":false,"input":"keyboard"},
 	{"surface":"result-detail","width":1280,"height":720,"ui":80,"text":150,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1280,"height":720,"ui":100,"text":150,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":true,"motion":false,"input":"keyboard"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"simulated_controller"},
+	{"surface":"hud","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":true,"input":"keyboard"},
+	{"surface":"restart-lobby","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
+	{"surface":"extraction","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":true,"input":"keyboard"},
+	{"surface":"extraction","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":true,"input":"keyboard"},
+	{"surface":"level-up-confirmation","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":true,"input":"keyboard"},
+	{"surface":"result","width":1920,"height":1080,"ui":100,"text":100,"contrast":false,"motion":false,"input":"keyboard"},
 ]
 
-const SOURCE_INPUT_PATHS: Array[String] = [
-	RUNNER_PATH,
-	"scenes/ui/hud.tscn", "scripts/ui/hud.gd", "scripts/ui/hud/combat_hud_view_model.gd", "scripts/ui/hud/combat_hud_responsive_layout.gd",
-	"scripts/ui/hud/combat_alert_tray.gd", "scripts/ui/hud/combat_member_inspect_panel.gd",
-	"scenes/ui/hud/combat_alert_tray.tscn", "scenes/ui/hud/combat_member_inspect_panel.tscn",
-	"scenes/ui/living_forge/components/forge_party_member_card.tscn", "scripts/ui/living_forge/components/forge_party_member_card.gd",
-	"scenes/ui/living_forge/components/forge_party_member_marker.tscn", "scripts/ui/living_forge/components/forge_party_member_marker.gd",
-	"scenes/ui/living_forge/components/forge_alert_card.tscn", "scripts/ui/living_forge/components/forge_alert_card.gd",
-	"scenes/ui/level_up_panel.tscn", "scripts/ui/level_up_panel.gd", "scenes/ui/upgrade_card.tscn", "scripts/ui/upgrade_card.gd",
-	"scenes/ui/upgrade_recipient_picker.tscn", "scripts/ui/upgrade_recipient_picker.gd", "scenes/ui/upgrade_tooltip_panel.tscn", "scripts/ui/upgrade_tooltip_panel.gd",
-	"scenes/ui/run_result/terminal_extraction_panel.tscn", "scripts/ui/run_result/terminal_extraction_panel.gd", "scripts/ui/run_result/terminal_extraction_projection.gd",
-	"scenes/ui/living_forge/components/forge_extraction_item_card.tscn", "scripts/ui/living_forge/components/forge_extraction_item_card.gd", "scenes/ui/storage/item_tooltip_panel.tscn", "scripts/ui/storage/item_tooltip_panel.gd",
-	"scenes/ui/run_result_panel.tscn", "scripts/ui/run_result_panel.gd", "scripts/ui/run_result/run_result_view_model.gd", "scripts/ui/run_result/run_result_projection.gd",
-	"scripts/ui/run_result/run_recap_entry_projection.gd", "scripts/ui/run_result/run_recap_section_projection.gd", "scripts/ui/run_result/run_result_party_member_projection.gd",
-	"scenes/ui/run_pause_menu.tscn", "scripts/ui/run_pause_menu.gd",
-	"scenes/ui/run_setup/run_setup_lobby_panel.tscn", "scripts/ui/class_selection_panel.gd", "scripts/ui/run_setup/run_setup_lobby_view_model.gd", "scripts/ui/run_setup/run_setup_restart_intent.gd",
-	"scripts/equipment/loadout_compatibility_service.gd", "scripts/equipment/loadout_compatibility_projection.gd", "data/equipment/core_equipment_catalog.tres", "data/items/core_item_foundation_catalog.tres",
-	"scenes/arena/arena.tscn",
-	"scripts/ui/living_forge/living_forge_theme_catalog.gd", "scripts/ui/living_forge/living_forge_tokens.gd",
-	"data/ui/living_forge/living_forge_theme.tres", "data/ui/living_forge/living_forge_high_contrast_theme.tres",
+const SOURCE_INPUT_ROOTS: Array[String] = ["addons/", "assets/", "data/", "scenes/", "scripts/"]
+const SOURCE_INPUT_EXACT_PATHS: Array[String] = ["project.godot", "icon.svg", "icon.svg.import", RUNNER_PATH, CAPTURE_ORCHESTRATOR_PATH]
+const REQUIRED_SOURCE_SENTINELS: Array[String] = [
+	"project.godot",
+	"icon.svg",
+	"scripts/ui/level_up_reveal_controller.gd",
+	"scenes/ui/ledger/character_ledger.tscn",
+	"scripts/ui/ledger/character_ledger.gd",
+	"scenes/ui/ledger/character_equipment_preview.tscn",
+	"scripts/ui/ledger/character_equipment_preview.gd",
+	"scenes/ui/living_forge/components/forge_action_bar.tscn",
+	"scripts/ui/living_forge/components/forge_action_bar.gd",
+	"scenes/ui/living_forge/components/forge_input_prompt.tscn",
+	"scripts/ui/living_forge/components/forge_input_prompt.gd",
+	"scenes/ui/living_forge/components/forge_class_card.tscn",
+	"scripts/ui/living_forge/components/forge_class_card.gd",
+	"scenes/ui/living_forge/components/forge_seat_card.tscn",
+	"scripts/ui/living_forge/components/forge_seat_card.gd",
+	"assets/ui/living_forge/icons/party-forge/leader-crown.svg",
+	"assets/ui/pin_filled.svg",
+	"assets/ui/pin_outline.svg",
+	"scripts/ui/level_up_reveal_controller.gd.uid",
+	"scripts/ui/ledger/character_equipment_preview.gd.uid",
+	"scripts/ui/living_forge/components/forge_class_card.gd.uid",
 ]
 
 class EvidenceRun:
@@ -221,6 +270,7 @@ var _entries: Array[Dictionary] = []
 var _captured: Dictionary = {}
 var _started_unix := 0
 var _sequence := 44000
+var _capture_provenance_envelope: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -229,18 +279,62 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_started_unix = int(Time.get_unix_time_from_system())
-	_assert(CAPTURES.size() == 45, "capture contract declares exactly 45 files")
+	_assert(CAPTURES.size() == 58, "capture contract declares exactly 58 files")
 	_assert(CAPTURE_METADATA.size() == CAPTURES.size(), "every capture has exact viewport/settings metadata")
 	_assert(CAPTURE_STATES.size() == CAPTURES.size() and CAPTURE_FOCUS_TARGETS.size() == CAPTURES.size(), "every capture has exact state and focus metadata")
 	_assert(_unique_strings(CAPTURES).size() == CAPTURES.size(), "capture names are globally unique")
+	var source_input_paths := _source_input_paths()
+	var head_source_blobs := _head_source_blob_hashes()
+	_assert(has_method(&"_untracked_runtime_source_paths"), "source input universe checks untracked files only within runtime roots")
+	var untracked_runtime_paths := _untracked_runtime_source_paths()
+	_assert(_unique_strings(source_input_paths).size() == source_input_paths.size(), "source input universe paths are globally unique")
+	_assert(_unique_strings(untracked_runtime_paths).size() == untracked_runtime_paths.size(), "untracked runtime source paths are globally unique")
+	for untracked_path: String in untracked_runtime_paths:
+		_assert(not untracked_path.ends_with(".uid"), "untracked runtime source check excludes UID sidecars: %s" % untracked_path)
+		_assert(not untracked_path.begins_with("docs/") and not untracked_path.begins_with(".superpowers/"), "untracked runtime source check excludes evidence and reports: %s" % untracked_path)
+	_assert(head_source_blobs.size() == source_input_paths.size(), "source input universe contains every exact-HEAD tracked runtime blob once")
+	var source_inputs_sorted := true
+	for index: int in range(1, source_input_paths.size()):
+		if source_input_paths[index - 1] >= source_input_paths[index]:
+			source_inputs_sorted = false
+	_assert(source_inputs_sorted, "source input universe is deterministically strict-sorted")
+	for required_path: String in REQUIRED_SOURCE_SENTINELS:
+		_assert(required_path in source_input_paths, "source input universe includes formerly omitted rendered dependency: %s" % required_path)
+	for relative_path: String in source_input_paths:
+		_assert(head_source_blobs.has(relative_path), "source input universe path is tracked at exact HEAD: %s" % relative_path)
+		_assert(FileAccess.file_exists(ProjectSettings.globalize_path("res://").path_join(relative_path)), "source input universe path exists: %s" % relative_path)
+		var in_runtime_root := relative_path in SOURCE_INPUT_EXACT_PATHS
+		for root_path: String in SOURCE_INPUT_ROOTS:
+			in_runtime_root = in_runtime_root or relative_path.begins_with(root_path)
+		_assert(in_runtime_root, "source input universe stays within approved runtime roots: %s" % relative_path)
+		_assert(not relative_path.begins_with("docs/") and not relative_path.begins_with(".superpowers/"), "source input universe excludes evidence and reports: %s" % relative_path)
+	_assert(CAPTURE_ORCHESTRATOR_PATH in source_input_paths, "source input universe includes canonical capture orchestrator")
 	if "--validate-only" in OS.get_cmdline_user_args():
+		_assert(has_method(&"_validate_only_source_inputs_match_exact_head"), "validate-only source-input exact-head cleanliness check exists")
+		if not _failures.is_empty():
+			_finish()
+			return
+		if not _validate_only_source_inputs_match_exact_head():
+			_finish()
+			return
 		_validate_existing_evidence()
+		_finish()
+		return
+	_assert(has_method(&"_load_capture_provenance_envelope"), "canonical capture provenance loader exists")
+	if not _failures.is_empty():
+		_finish()
+		return
+	_capture_provenance_envelope = _load_capture_provenance_envelope()
+	_assert(not _capture_provenance_envelope.is_empty(), "non-validate capture requires sealed canonical provenance")
+	if not _capture_provenance_envelope.is_empty():
+		_validate_capture_provenance(_capture_provenance_envelope)
+	if not _failures.is_empty():
 		_finish()
 		return
 	root.mode = Window.MODE_WINDOWED
 	root.content_scale_size = Vector2i.ZERO
 	_assert(RenderingServer.get_current_rendering_method() == "gl_compatibility", "capture uses OpenGL Compatibility")
-	_assert(_capture_source_is_clean(), "capture source is the exact clean committed harness head except generated evidence output")
+	_assert(_validate_only_source_inputs_match_exact_head(), "capture source inputs match the exact committed harness head")
 	if not _failures.is_empty():
 		_finish()
 		return
@@ -299,6 +393,19 @@ func _capture_all() -> void:
 	await _capture_extraction(42, &"detail")
 	await _capture_result_state(43, &"expanded")
 	await _capture_result_state(44, &"expanded")
+	await _capture_collapsed_hud(45, 6, 0, true, false, false, &"party_header")
+	await _capture_collapsed_hud(46, 24, 3, true, false, true, &"party_header")
+	await _capture_collapsed_hud(47, 6, 3, false, true, true, &"alerts_header")
+	await _capture_collapsed_hud(48, 6, 0, false, true, false, &"alerts_header")
+	await _capture_collapsed_hud(49, 24, 3, true, true, true, &"party_header")
+	await _capture_collapsed_hud(50, 24, 3, true, true, true, &"alerts_header")
+	await _capture_collapsed_hud(51, 6, 3, false, true, true, &"controller_tray")
+	await _capture_collapsed_hud(52, 24, 3, true, true, true, &"party_header")
+	await _capture_restart_lobby(53, true, true)
+	await _capture_extraction(54, &"primary_confirm")
+	await _capture_extraction(55, &"primary_consequence")
+	await _capture_level_up(56, &"primary_confirmation")
+	await _capture_result_state(57, &"primary_resolution")
 
 
 func _capture_hud(index: int, count: int, alert_count: int, mode: StringName = &"") -> void:
@@ -343,6 +450,60 @@ func _capture_hud(index: int, count: int, alert_count: int, mode: StringName = &
 		if not controls.is_empty(): await _mouse_motion(controls[-1].get_global_rect().get_center())
 	elif mode == &"member_focus":
 		if not controls.is_empty(): controls[mini(1, controls.size() - 1)].grab_focus()
+	await _capture(index)
+	hud.free()
+	backdrop.free()
+	await _frames(2)
+	_cleanup_hud_fixture(fixture)
+
+
+func _capture_collapsed_hud(
+	index: int,
+	count: int,
+	alert_count: int,
+	party_is_collapsed: bool,
+	alerts_are_collapsed: bool,
+	mixed_severity: bool,
+	focus_mode: StringName,
+) -> void:
+	paused = false
+	var metadata := CAPTURE_METADATA[index]
+	_apply_window(metadata)
+	var settings := _settings_for(metadata)
+	settings.hud_party_collapsed = party_is_collapsed
+	settings.hud_alerts_collapsed = alerts_are_collapsed
+	var backdrop := _battlefield_backdrop()
+	var fixture := _hud_fixture(count, alert_count, settings)
+	if mixed_severity:
+		_assert(count >= 3 and alert_count >= 3, "%s has enough members for dead, downed, and critical truth" % CAPTURES[index])
+		(fixture.health_by_member[1] as HealthComponent).apply_damage(1000.0)
+		(fixture.health_by_member[2] as HealthComponent).apply_damage(1000.0)
+	var hud := HUD_SCENE.instantiate() as HUD
+	root.add_child(hud)
+	_configure_active_run_hud(hud, fixture)
+	await _frames(6)
+	_assert(hud.party_collapsed() == party_is_collapsed and hud.alerts_collapsed() == alerts_are_collapsed, "%s applies the exact independent collapse state" % CAPTURES[index])
+	_assert((hud.get_node("Margin/CombatStatus/LeaderCard") as Control).visible == not party_is_collapsed, "%s collapses the leader with Party" % CAPTURES[index])
+	_assert((hud.get_node("Margin/CombatStatus/Experience") as Control).visible == not party_is_collapsed, "%s collapses XP with Party" % CAPTURES[index])
+	_assert((hud.get_node("Margin/CombatStatus/PartyRegion") as Control).visible == not party_is_collapsed, "%s collapses the roster with Party" % CAPTURES[index])
+	_assert((hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible == not alerts_are_collapsed, "%s collapses alert cards with Alerts" % CAPTURES[index])
+	if mixed_severity:
+		_assert(hud.current_projection.alert_count_for(CombatAlertProjection.Severity.DEAD) == 1, "%s exposes one DEAD member" % CAPTURES[index])
+		_assert(hud.current_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED) == 1, "%s exposes one DOWNED member" % CAPTURES[index])
+		_assert(hud.current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL) == 1, "%s exposes one CRITICAL member" % CAPTURES[index])
+		_assert(hud.current_projection.highest_alert_severity() == CombatAlertProjection.Severity.DEAD, "%s exposes DEAD as the highest severity" % CAPTURES[index])
+	elif alert_count == 0:
+		_assert(hud.current_projection.all_alerts.is_empty(), "%s exposes exact ALL CLEAR alert truth" % CAPTURES[index])
+	match focus_mode:
+		&"party_header":
+			(hud.get_node("Margin/CombatStatus/PartyHeader") as Button).grab_focus()
+		&"alerts_header":
+			(hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button).grab_focus()
+		&"controller_tray":
+			var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+			alerts_header.grab_focus()
+			await _joy_button(JOY_BUTTON_DPAD_DOWN)
+			_assert((hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button).has_focus(), "%s reaches persistent tray access through real controller traversal" % CAPTURES[index])
 	await _capture(index)
 	hud.free()
 	backdrop.free()
@@ -438,11 +599,13 @@ func _capture_level_up(index: int, mode: StringName) -> void:
 		(panel.get_node("Frame/Content/Recipient/Content/RecipientsScroll") as ScrollContainer).ensure_control_visible(member_24)
 		await _frames(3)
 		_assert((panel.get_node("Frame/Content/Recipient") as Control).visible and member_24.has_focus(), "%s renders and reaches recipient 24" % CAPTURES[index])
-		if mode == &"confirmation":
+		if mode in [&"confirmation", &"primary_confirmation"]:
 			member_24.pressed.emit()
 			await _frames(3)
 			var cancel := panel.get_node("Frame/Content/Confirmation/Actions/Cancel") as Button
 			_assert(cancel.has_focus(), "%s defaults confirmation to safe Cancel" % CAPTURES[index])
+			if mode == &"primary_confirmation":
+				(panel.get_node("Frame/Content/Confirmation/Actions/Confirm") as Button).grab_focus()
 	await _capture(index)
 	panel.free()
 	party.free()
@@ -488,6 +651,17 @@ func _capture_extraction(index: int, mode: StringName) -> void:
 			await _frames(3)
 			(panel.get_node("ItemTooltipDetail/Frame/Tooltip/Layout/Header/Close") as Button).grab_focus()
 			_assert((panel.get_node("ItemTooltipDetail") as Control).visible, "%s renders the real extraction detail surface" % CAPTURES[index])
+	elif mode == &"primary_confirm":
+		var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
+		_assert(not confirm.disabled, "%s exposes an enabled Confirm Extraction action" % CAPTURES[index])
+		confirm.grab_focus()
+	elif mode == &"primary_consequence":
+		var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
+		panel.show_unused_capacity_warning(1, projection.lost_count, confirm)
+		await _frames(3)
+		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
+		acknowledge.grab_focus()
+		_assert((panel.get_node("UnusedCapacityWarning") as Control).visible, "%s exposes the authentic unused-capacity consequence" % CAPTURES[index])
 	else:
 		var focus_owner := root.gui_get_focus_owner() as Control
 		if focus_owner != null:
@@ -527,8 +701,8 @@ func _capture_result_state(index: int, mode: StringName, pending_kind := 0) -> v
 		&"victory", &"defeat", &"expanded": projected = finalized
 		&"save": projection_result = view_model.terminal_save_interrupted(fixture.snapshot, "Terminal record could not be saved. Retry Terminal Save.")
 		&"refresh": projection_result = view_model.terminal_refresh_interrupted(fixture.snapshot, "Terminal state was saved, but recovery could not refresh. Retry Terminal Recovery.")
-		&"resolution":
-			var resolution_reason := "Resolution was interrupted before durable acceptance. Retry Resolution."
+		&"resolution", &"primary_resolution":
+			var resolution_reason := "Run resolution needs another attempt before durable acceptance. Retry Resolution." if mode == &"primary_resolution" else "Resolution was interrupted before durable acceptance. Retry Resolution."
 			projection_result = view_model.resolution_interrupted(fixture.snapshot, resolution_reason, _durable_resolution_safety(fixture, resolution_reason))
 		&"projection": projection_result = view_model.projection_interrupted(fixture.snapshot, fixture.resolution, "Accepted results could not be rebuilt. Retry Results.")
 		&"automatic": projected = _automatic_overflow_projection(view_model, fixture)
@@ -553,7 +727,7 @@ func _capture_result_state(index: int, mode: StringName, pending_kind := 0) -> v
 		_assert(visible_actions == ["RestartRun", "ReturnToForge", "QuitApplication"] and (panel.get_node("Frame/Content/Body") as Control).visible, "%s exposes finalized truth and exact exits" % CAPTURES[index])
 	elif mode == &"save": _assert(visible_actions == ["RetryTerminalSave"], "%s exposes only Retry Terminal Save" % CAPTURES[index])
 	elif mode == &"refresh": _assert(visible_actions == ["RetryTerminalRefresh"], "%s exposes only Retry Terminal Recovery" % CAPTURES[index])
-	elif mode == &"resolution":
+	elif mode in [&"resolution", &"primary_resolution"]:
 		_assert(visible_actions == ["RetryResolution", "OpenArmoury", "ReturnToForge", "QuitApplication"], "%s exposes the exact durable recovery action set" % CAPTURES[index])
 		_assert((panel.get_node("Frame/Content/Footer/Actions/RetryResolution") as Button).has_focus(), "%s retains safe Retry Resolution focus" % CAPTURES[index])
 	elif mode == &"projection": _assert(visible_actions == ["RetryProjection"], "%s exposes only Retry Results" % CAPTURES[index])
@@ -610,7 +784,7 @@ func _capture_pause_abandon(index: int) -> void:
 	_cleanup_hud_fixture(fixture)
 
 
-func _capture_restart_lobby(index: int, valid_intent: bool) -> void:
+func _capture_restart_lobby(index: int, valid_intent: bool, focus_start := false) -> void:
 	paused = false
 	var metadata := CAPTURE_METADATA[index]
 	_apply_window(metadata)
@@ -635,6 +809,8 @@ func _capture_restart_lobby(index: int, valid_intent: bool) -> void:
 		var mage := panel.selection_focus(&"mage") as Button
 		var start := panel.action_focus(&"start") as Button
 		_assert(projection.state == RunSetupLobbyProjection.State.READY and mage != null and mage.has_focus() and start != null and not start.disabled, "%s presents stable READY Mage preselection with Start enabled" % CAPTURES[index])
+		if focus_start and start != null:
+			start.grab_focus()
 	await _capture(index)
 	panel.free()
 	await _frames(2)
@@ -872,7 +1048,9 @@ func _assert_declared_focus(index: int) -> void:
 		"extraction_detail:close": _assert(owner.name == &"Close" and "ItemTooltipDetail" in String(owner.get_path()), "%s focuses extraction detail Close" % CAPTURES[index])
 		"result:return_to_forge": _assert(owner.name == &"ReturnToForge", "%s focuses safe Return to Forge" % CAPTURES[index])
 		"result:lost_row": _assert(owner.get_meta(&"recap_section_id", &"") == &"loot" and String(owner.get_meta(&"recap_entry_label", "")) == "Lost", "%s focuses truthful Lost recap row" % CAPTURES[index])
-		"result:retry_resolution": _assert(owner.name == &"RetryResolution", "%s focuses Retry Resolution" % CAPTURES[index])
+		"result:retry_resolution":
+			_assert(owner.name == &"RetryResolution", "%s focuses Retry Resolution" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgePrimaryButton", CAPTURES[index])
 		"result:retry_terminal_save": _assert(owner.name == &"RetryTerminalSave", "%s focuses Retry Terminal Save" % CAPTURES[index])
 		"result:retry_projection": _assert(owner.name == &"RetryProjection", "%s focuses Retry Results" % CAPTURES[index])
 		"result:retry_terminal_refresh": _assert(owner.name == &"RetryTerminalRefresh", "%s focuses Retry Terminal Recovery" % CAPTURES[index])
@@ -881,7 +1059,58 @@ func _assert_declared_focus(index: int) -> void:
 		"lobby:mage": _assert(owner.name == &"Class_mage", "%s focuses preselected Mage" % CAPTURES[index])
 		"lobby:first_class": _assert(String(owner.name).begins_with("Class_"), "%s focuses a real explicit class choice" % CAPTURES[index])
 		"result:expanded_row": _assert(owner.has_meta(&"recap_section_id") and (owner.get_node_or_null("Detail") as Control).visible, "%s focuses a real expanded recap row" % CAPTURES[index])
+		"hud:party_header": _assert(owner.name == &"PartyHeader", "%s focuses the exact Party header" % CAPTURES[index])
+		"hud:alerts_header": _assert(owner.name == &"Header" and "AlertRegion" in String(owner.get_path()), "%s focuses the exact Alerts header" % CAPTURES[index])
+		"hud:alerts_tray_action": _assert(owner.name == &"AlertsTrayAction", "%s focuses the persistent Alerts tray action" % CAPTURES[index])
+		"lobby:start":
+			_assert(StringName(owner.get_meta(&"action_id", &"")) == &"start", "%s focuses exact Start Run" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgeStartButton", CAPTURES[index])
+		"extraction:confirm":
+			_assert(owner.name == &"Confirm" and "Frame/Content/Actions/Confirm" in String(owner.get_path()), "%s focuses exact Confirm Extraction" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgePrimaryButton", CAPTURES[index])
+		"extraction:acknowledge":
+			_assert(owner.name == &"Acknowledge", "%s focuses exact Accept Consequence" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgePrimaryButton", CAPTURES[index])
+		"level_up:confirm":
+			_assert(owner.name == &"Confirm" and "Confirmation" in String(owner.get_path()), "%s focuses exact level-up Confirm" % CAPTURES[index])
+			_assert_shared_primary_focus(owner as Button, &"LivingForgePrimaryButton", CAPTURES[index])
 		_: _assert(false, "%s has an unhandled focus target %s" % [CAPTURES[index], target])
+
+
+func _assert_shared_primary_focus(button: Button, expected_variation: StringName, label: String) -> void:
+	_assert(button != null and button.has_focus(), "%s resolves a live focused primary action" % label)
+	if button == null:
+		return
+	_assert(button.theme_type_variation == expected_variation, "%s uses the exact shared primary theme variation" % label)
+	_assert(not button.has_theme_stylebox_override(&"focus") and not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus-style or foreground patch" % label)
+	var focus := button.get_theme_stylebox(&"focus") as StyleBoxFlat
+	var shared := button.get_theme_stylebox(&"focus", &"LivingForgePrimaryButton") as StyleBoxFlat
+	_assert(focus != null and focus.is_draw_center_enabled() and focus.bg_color.a > 0.0, "%s resolves a genuinely filled focus style" % label)
+	_assert(shared != null and focus != null and _focus_style_signature(focus) == _focus_style_signature(shared), "%s resolves the shared LivingForgePrimaryButton focus style" % label)
+	if focus != null:
+		var foreground := button.get_theme_color(&"font_focus_color")
+		_assert(_contrast_ratio(foreground, focus.bg_color) >= 4.5, "%s focused text contrast is at least 4.5:1" % label)
+
+
+func _focus_style_signature(style: StyleBoxFlat) -> Array:
+	return [
+		style.draw_center, style.bg_color, style.border_color,
+		style.border_width_left, style.border_width_top, style.border_width_right, style.border_width_bottom,
+		style.corner_radius_top_left, style.corner_radius_top_right, style.corner_radius_bottom_right, style.corner_radius_bottom_left,
+	]
+
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var brighter := maxf(_relative_luminance(first), _relative_luminance(second))
+	var darker := minf(_relative_luminance(first), _relative_luminance(second))
+	return (brighter + 0.05) / (darker + 0.05)
+
+
+func _relative_luminance(value: Color) -> float:
+	var red := value.r / 12.92 if value.r <= 0.04045 else pow((value.r + 0.055) / 1.055, 2.4)
+	var green := value.g / 12.92 if value.g <= 0.04045 else pow((value.g + 0.055) / 1.055, 2.4)
+	var blue := value.b / 12.92 if value.b <= 0.04045 else pow((value.b + 0.055) / 1.055, 2.4)
+	return 0.2126 * red + 0.7152 * green + 0.0722 * blue
 
 
 func _write_manifest() -> void:
@@ -891,14 +1120,14 @@ func _write_manifest() -> void:
 	var unique_hashes: Dictionary = {}
 	for name: Variant in _captured.keys(): actual.append(String(name))
 	actual.sort()
-	_assert(actual == expected and _entries.size() == CAPTURES.size(), "current run captured the exact 45-member contract before manifest write")
+	_assert(actual == expected and _entries.size() == CAPTURES.size(), "current run captured the exact 58-member contract before manifest write")
 	for index: int in _entries.size():
 		var entry := _entries[index]
 		_assert(String(entry.get("file", "")) == CAPTURES[index], "current-run entry order is exact at index %d" % index)
 		unique_hashes[String(entry.get("sha256", ""))] = true
-	_assert(unique_hashes.size() == CAPTURES.size(), "current run has 45 unique capture hashes before manifest write")
+	_assert(unique_hashes.size() == CAPTURES.size(), "current run has 58 unique capture hashes before manifest write")
 	if not _failures.is_empty(): return
-	var manifest := {"schema_version":MANIFEST_SCHEMA_VERSION,"run_id":"%d-%d" % [OS.get_process_id(),_started_unix],"captured_at_utc":Time.get_datetime_string_from_system(true,true),"source_head":_source_head(),"source_tree_fingerprint":_source_fingerprint(),"capture_contract_sha256":_capture_contract_sha256(),"renderer":_renderer_metadata(),"window_mode":"windowed","capture_environment":{"hud_backdrop":"res://scenes/arena/arena.tscn","camera":"deterministic evidence camera"},"entries":_entries}
+	var manifest := {"schema_version":MANIFEST_SCHEMA_VERSION,"run_id":"%d-%d" % [OS.get_process_id(),_started_unix],"captured_at_utc":Time.get_datetime_string_from_system(true,true),"source_head":_source_head(),"source_tree_fingerprint":_source_fingerprint(),"capture_contract_sha256":_capture_contract_sha256(),"capture_provenance":_capture_provenance_envelope.duplicate(true),"renderer":_renderer_metadata(),"window_mode":"windowed","capture_environment":{"hud_backdrop":"res://scenes/arena/arena.tscn","camera":"deterministic evidence camera"},"entries":_entries}
 	var path := ProjectSettings.globalize_path(SCREENSHOT_ROOT.path_join(MANIFEST_NAME))
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	_assert(file != null, "schema-2 manifest opens for writing")
@@ -915,6 +1144,7 @@ func _validate_existing_evidence(require_fresh := false) -> void:
 	var value: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
 	var manifest := value as Dictionary if value is Dictionary else {}
 	_assert(int(manifest.get("schema_version", 0)) == MANIFEST_SCHEMA_VERSION, "manifest schema version is exactly 2")
+	_validate_capture_provenance(manifest.get("capture_provenance", {}) as Dictionary)
 	_assert(String(manifest.get("source_head", "")) == _source_head(), "manifest source head matches exact candidate Git head")
 	var manifest_fingerprint := manifest.get("source_tree_fingerprint", {}) as Dictionary
 	var current_fingerprint := _source_fingerprint()
@@ -926,12 +1156,12 @@ func _validate_existing_evidence(require_fresh := false) -> void:
 		and JSON.stringify(manifest_fingerprint.get("inputs", [])) == JSON.stringify(current_fingerprint.get("inputs", [])),
 		"manifest source fingerprint matches declared current source inputs",
 	)
-	_assert(String(manifest.get("capture_contract_sha256", "")) == _capture_contract_sha256(), "manifest capture contract hash matches all 45 exact specifications")
+	_assert(String(manifest.get("capture_contract_sha256", "")) == _capture_contract_sha256(), "manifest capture contract hash matches all 58 exact specifications")
 	_assert(JSON.stringify(manifest.get("renderer", {})) == JSON.stringify(_renderer_metadata()), "manifest renderer metadata matches current renderer")
 	_assert(String(manifest.get("window_mode", "")) == "windowed", "manifest declares windowed capture")
 	_assert(manifest.get("capture_environment", {}) == {"hud_backdrop":"res://scenes/arena/arena.tscn","camera":"deterministic evidence camera"}, "manifest declares the production Arena HUD contrast field")
 	var entries := manifest.get("entries", []) as Array
-	_assert(entries.size() == CAPTURES.size(), "manifest has exactly 45 entries")
+	_assert(entries.size() == CAPTURES.size(), "manifest has exactly 58 entries")
 	var hashes: Dictionary = {}
 	for index: int in CAPTURES.size():
 		if index >= entries.size(): break
@@ -956,7 +1186,7 @@ func _validate_existing_evidence(require_fresh := false) -> void:
 		_assert(not hashes.has(hash), "%s has a globally unique hash" % name)
 		hashes[hash] = true
 		if require_fresh: _assert(int(FileAccess.get_modified_time(path)) >= _started_unix, "%s is from the current capture run" % name)
-	_assert(hashes.size() == CAPTURES.size(), "all 45 captures have globally unique nonempty hashes")
+	_assert(hashes.size() == CAPTURES.size(), "all 58 captures have globally unique nonempty hashes")
 
 
 func _assert_no_extra_pngs(require_complete: bool) -> void:
@@ -964,7 +1194,9 @@ func _assert_no_extra_pngs(require_complete: bool) -> void:
 	_assert(directory != null, "evidence directory exists")
 	if directory == null: return
 	var actual: Array[String] = []
-	for file_name: String in directory.get_files(): actual.append(file_name)
+	for file_name: String in directory.get_files():
+		if file_name == MANIFEST_NAME or file_name.get_extension().to_lower() == "png":
+			actual.append(file_name)
 	actual.sort()
 	var expected: Array[String] = CAPTURES.duplicate()
 	expected.append(MANIFEST_NAME)
@@ -986,7 +1218,7 @@ func _source_head() -> String:
 func _source_fingerprint() -> Dictionary:
 	var records: Array[Dictionary] = []
 	var root_path := ProjectSettings.globalize_path("res://")
-	for relative_path: String in SOURCE_INPUT_PATHS:
+	for relative_path: String in _source_input_paths():
 		var absolute_path := root_path.path_join(relative_path)
 		_assert(FileAccess.file_exists(absolute_path), "declared fingerprint input exists: %s" % relative_path)
 		if FileAccess.file_exists(absolute_path): records.append({"path":relative_path,"sha256":_sha256(FileAccess.get_file_as_bytes(absolute_path))})
@@ -997,7 +1229,7 @@ func _source_fingerprint() -> Dictionary:
 		var path := String(record.path)
 		var hash := String(record.sha256)
 		_assert(context.update(("%d:%s%d:%s\n" % [path.length(),path,hash.length(),hash]).to_utf8_buffer()) == OK, "source fingerprint hashes %s" % path)
-	return {"algorithm":"sha256","method":"Sorted explicit Task 14 source paths; SHA-256 a length-prefixed path/file-SHA record stream.","path_count":records.size(),"sha256":context.finish().hex_encode(),"inputs":records}
+	return {"algorithm":"sha256","method":"Sorted exact-HEAD tracked runtime universe; SHA-256 a length-prefixed path/file-SHA record stream.","path_count":records.size(),"sha256":context.finish().hex_encode(),"inputs":records}
 
 
 func _renderer_metadata() -> Dictionary:
@@ -1025,23 +1257,279 @@ func _fixture_kind_for(metadata: Dictionary) -> String:
 	return "production_arena" if String(metadata.surface).begins_with("hud") or String(metadata.surface) == "pause" else "production_scene"
 
 
-func _capture_source_is_clean() -> bool:
-	var output: Array = []
+func _load_capture_provenance_envelope() -> Dictionary:
+	var provenance_path := ""
+	for argument: String in OS.get_cmdline_user_args():
+		if not argument.begins_with("--capture-provenance="):
+			continue
+		_assert(provenance_path.is_empty(), "canonical capture supplies exactly one provenance envelope")
+		provenance_path = argument.trim_prefix("--capture-provenance=")
+	_assert(not provenance_path.is_empty(), "canonical capture provenance argument is present")
+	if provenance_path.is_empty():
+		return {}
+	_assert(FileAccess.file_exists(provenance_path), "canonical capture provenance file exists")
+	if not FileAccess.file_exists(provenance_path):
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(provenance_path))
+	_assert(parsed is Dictionary, "canonical capture provenance envelope parses")
+	return parsed as Dictionary if parsed is Dictionary else {}
+
+
+func _validate_capture_provenance(envelope: Dictionary) -> void:
+	_assert(not envelope.is_empty(), "capture provenance is present")
+	if envelope.is_empty():
+		return
+	_assert(int(envelope.get("schema_version", 0)) == CAPTURE_PROVENANCE_SCHEMA_VERSION, "capture provenance envelope schema is exactly 1")
+	var payload_base64 := String(envelope.get("payload_base64", ""))
+	var payload_hash := String(envelope.get("payload_sha256", ""))
+	var payload_bytes := Marshalls.base64_to_raw(payload_base64)
+	_assert(not payload_bytes.is_empty(), "capture provenance sealed payload decodes")
+	_assert(payload_hash.length() == 64 and _sha256(payload_bytes) == payload_hash, "capture provenance sealed payload hash matches")
+	if payload_bytes.is_empty() or _sha256(payload_bytes) != payload_hash:
+		return
+	var parsed_payload: Variant = JSON.parse_string(payload_bytes.get_string_from_utf8())
+	_assert(parsed_payload is Dictionary, "capture provenance sealed payload parses")
+	if not parsed_payload is Dictionary:
+		return
+	var payload := parsed_payload as Dictionary
+	_assert(int(payload.get("schema_version", 0)) == CAPTURE_PROVENANCE_SCHEMA_VERSION, "capture provenance payload schema is exactly 1")
+	_assert(String(payload.get("source_head", "")) == _source_head(), "capture provenance source head matches exact candidate")
+
+	var orchestrator := payload.get("orchestrator", {}) as Dictionary
+	_assert(String(orchestrator.get("path", "")) == CAPTURE_ORCHESTRATOR_PATH, "capture provenance names canonical orchestrator")
+	var orchestrator_path := ProjectSettings.globalize_path("res://").path_join(CAPTURE_ORCHESTRATOR_PATH)
+	_assert(String(orchestrator.get("sha256", "")) == _sha256_file(orchestrator_path), "capture provenance orchestrator hash matches current bytes")
+
+	var godot := payload.get("godot", {}) as Dictionary
+	_assert(String(godot.get("version", "")) == EXPECTED_GODOT_VERSION, "capture provenance Godot version is exact 4.7.1 mono")
+	var engine_version := Engine.get_version_info()
+	_assert(int(engine_version.get("major", 0)) == 4 and int(engine_version.get("minor", 0)) == 7 and int(engine_version.get("patch", 0)) == 1, "capture runtime Godot semantic version is exact")
+	_assert(String(engine_version.get("status", "")) == "stable" and String(engine_version.get("hash", "")).begins_with("a13da4feb"), "capture runtime Godot build identity is exact")
+	var engine_path := OS.get_executable_path()
+	_assert(String(godot.get("engine_sha256", "")) == _sha256_file(engine_path), "capture provenance Godot engine hash matches running executable")
+	var launcher_filename := String(godot.get("launcher_filename", ""))
+	_assert(not launcher_filename.is_empty() and launcher_filename.get_file() == launcher_filename, "capture provenance Godot launcher filename is bounded")
+	var launcher_path := engine_path.get_base_dir().path_join(launcher_filename)
+	_assert(FileAccess.file_exists(launcher_path), "capture provenance Godot launcher exists beside running executable")
+	_assert(String(godot.get("launcher_sha256", "")) == _sha256_file(launcher_path), "capture provenance Godot launcher hash matches invoked binary")
+
+	var pre_import := payload.get("pre_import", {}) as Dictionary
+	_assert(bool(pre_import.get("verified", false)), "capture provenance proves pre-import cleanliness")
+	_assert((pre_import.get("tracked_changes", []) as Array).is_empty(), "capture provenance pre-import tracked state is empty")
+	_assert((pre_import.get("untracked", []) as Array).is_empty(), "capture provenance pre-import untracked state is empty")
+	_assert((pre_import.get("ignored", []) as Array).is_empty(), "capture provenance pre-import ignored state is empty")
+
+	_validate_inventory_document(payload.get("generated_uids", {}) as Dictionary, _generated_uid_inventory(), "generated UID")
+	var png_import_inventory := _runtime_png_import_inventory()
+	_validate_inventory_document(payload.get("runtime_png_imports", {}) as Dictionary, png_import_inventory, "runtime PNG import")
+	_validate_inventory_document(payload.get("referenced_ctex", {}) as Dictionary, _referenced_ctex_inventory(png_import_inventory), "referenced CTEX")
+
+
+func _validate_inventory_document(expected: Dictionary, actual: Dictionary, label: String) -> void:
+	var expected_records := expected.get("records", []) as Array
+	var actual_records := actual.get("records", []) as Array
+	_assert(int(expected.get("count", -1)) == expected_records.size(), "%s provenance count matches its records" % label)
+	_assert(String(expected.get("aggregate_sha256", "")) == _inventory_aggregate(expected_records), "%s provenance aggregate matches its records" % label)
+	_assert(int(actual.get("count", -1)) == actual_records.size(), "%s live count matches its records" % label)
+	_assert(String(actual.get("aggregate_sha256", "")) == _inventory_aggregate(actual_records), "%s live aggregate matches its records" % label)
+	_assert(expected_records.size() == actual_records.size(), "%s live path count matches sealed provenance" % label)
+	var expected_by_path: Dictionary = {}
+	for record: Dictionary in expected_records:
+		expected_by_path[String(record.get("path", ""))] = String(record.get("sha256", ""))
+	var actual_by_path: Dictionary = {}
+	for record: Dictionary in actual_records:
+		actual_by_path[String(record.get("path", ""))] = String(record.get("sha256", ""))
+	_assert(expected_by_path.size() == expected_records.size(), "%s sealed paths are unique" % label)
+	_assert(actual_by_path.size() == actual_records.size(), "%s live paths are unique" % label)
+	var path_sets_match := expected_by_path.size() == actual_by_path.size()
+	for path: String in expected_by_path:
+		var present := actual_by_path.has(path)
+		_assert(present, "%s live inventory is missing sealed path: %s" % [label, path])
+		path_sets_match = path_sets_match and present
+	for path: String in actual_by_path:
+		var expected_path := expected_by_path.has(path)
+		_assert(expected_path, "%s live inventory has unexpected path: %s" % [label, path])
+		path_sets_match = path_sets_match and expected_path
+	if not path_sets_match:
+		return
+	for path: String in expected_by_path:
+		_assert(String(expected_by_path[path]) == String(actual_by_path[path]), "%s live hash matches sealed provenance: %s" % [label, path])
+
+
+func _generated_uid_inventory() -> Dictionary:
 	var repository_root := ProjectSettings.globalize_path("res://")
-	var tracked_output: Array = []
-	var tracked_code := OS.execute("git", PackedStringArray(["-C",repository_root,"ls-files","--error-unmatch",RUNNER_PATH]), tracked_output, true)
-	if tracked_code != 0: return false
-	var diff_code := OS.execute("git", PackedStringArray(["-C",repository_root,"diff","--quiet","HEAD","--",RUNNER_PATH]), [], true)
-	if diff_code != 0: return false
-	var code := OS.execute("git", PackedStringArray(["-C",repository_root,"status","--porcelain=v1","--untracked-files=all"]), output, true)
-	if code != 0: return false
-	for raw_line: String in String("".join(output)).split("\n", false):
-		if raw_line.length() < 4: continue
-		var path := raw_line.substr(3).strip_edges().replace("\\", "/")
-		if " -> " in path: path = path.get_slice(" -> ", 1)
-		if path.begins_with("docs/validation/screenshots/living-forge-combat-loop/"): continue
+	var output: Array = []
+	var code := OS.execute("git", PackedStringArray(["-C", repository_root, "ls-files", "--others", "--exclude-standard", "--"]), output, true)
+	_assert(code == 0, "generated UID inventory query resolves")
+	var paths: Dictionary = {}
+	if code == 0:
+		for relative_path: String in String("".join(output)).split("\n", false):
+			var normalized := relative_path.strip_edges().replace("\\", "/")
+			if normalized.ends_with(".uid"):
+				paths[normalized] = true
+	return _inventory_for_paths(_sorted_string_keys(paths))
+
+
+func _runtime_png_import_inventory() -> Dictionary:
+	var paths: Array[String] = []
+	_collect_files_with_suffix("res://assets", ".png.import", paths)
+	paths.sort()
+	return _inventory_for_paths(paths)
+
+
+func _referenced_ctex_inventory(png_import_inventory: Dictionary) -> Dictionary:
+	var paths: Dictionary = {}
+	for record: Variant in png_import_inventory.get("records", []) as Array:
+		var import_path := String((record as Dictionary).get("path", ""))
+		var content := FileAccess.get_file_as_string("res://" + import_path)
+		for line: String in content.split("\n", false):
+			var marker_index := line.find("res://.godot/imported/")
+			var suffix_index := line.find(".ctex", marker_index)
+			if marker_index >= 0 and suffix_index >= marker_index:
+				var start := marker_index + "res://".length()
+				var relative_path := line.substr(start, suffix_index + ".ctex".length() - start)
+				paths[relative_path] = true
+	return _inventory_for_paths(_sorted_string_keys(paths))
+
+
+func _inventory_for_paths(paths: Array[String]) -> Dictionary:
+	var records: Array[Dictionary] = []
+	for relative_path: String in paths:
+		var absolute_path := ProjectSettings.globalize_path("res://").path_join(relative_path)
+		_assert(FileAccess.file_exists(absolute_path), "provenance inventory file exists: %s" % relative_path)
+		if FileAccess.file_exists(absolute_path):
+			records.append({"path":relative_path,"sha256":_sha256_file(absolute_path)})
+	return {"count":records.size(),"aggregate_sha256":_inventory_aggregate(records),"records":records}
+
+
+func _inventory_aggregate(records: Array) -> String:
+	var canonical := ""
+	for record: Variant in records:
+		var row := record as Dictionary
+		var path := String(row.get("path", ""))
+		var hash := String(row.get("sha256", ""))
+		canonical += "%d:%s%d:%s\n" % [path.length(), path, hash.length(), hash]
+	return _sha256(canonical.to_utf8_buffer())
+
+
+func _collect_files_with_suffix(directory_path: String, suffix: String, result: Array[String]) -> void:
+	var directory := DirAccess.open(directory_path)
+	_assert(directory != null, "provenance inventory directory opens: %s" % directory_path)
+	if directory == null:
+		return
+	for file_name: String in directory.get_files():
+		if file_name.ends_with(suffix):
+			result.append((directory_path.path_join(file_name)).trim_prefix("res://"))
+	for child_name: String in directory.get_directories():
+		_collect_files_with_suffix(directory_path.path_join(child_name), suffix, result)
+
+
+func _validate_only_source_inputs_match_exact_head() -> bool:
+	var repository_root := ProjectSettings.globalize_path("res://")
+	var head_blobs := _head_source_blob_hashes()
+	var source_input_paths := _sorted_string_keys(head_blobs)
+	var object_format := _git_object_format(repository_root)
+	var exact := true
+	if object_format not in ["sha1", "sha256"]:
+		_assert(false, "validate-only source input Git object format resolves")
 		return false
-	return true
+	for untracked_path: String in _untracked_runtime_source_paths():
+		_assert(false, "validate-only source input is untracked at exact HEAD: %s" % untracked_path)
+		exact = false
+	for relative_path: String in source_input_paths:
+		var absolute_path := repository_root.path_join(relative_path)
+		if not FileAccess.file_exists(absolute_path):
+			_assert(false, "validate-only source input is missing: %s" % relative_path)
+			exact = false
+			continue
+		var current_hash := _git_blob_hash(FileAccess.get_file_as_bytes(absolute_path), object_format)
+		if current_hash != String(head_blobs.get(relative_path, "")):
+			_assert(false, "validate-only source input differs from exact HEAD: %s" % relative_path)
+			exact = false
+	if exact:
+		print("LIVING_FORGE_COMBAT_LOOP_VISUAL_SOURCE_INPUTS: PASS count=%d" % source_input_paths.size())
+	return exact
+
+
+func _source_input_paths() -> Array[String]:
+	return _sorted_string_keys(_head_source_blob_hashes())
+
+
+func _head_source_blob_hashes() -> Dictionary:
+	var repository_root := ProjectSettings.globalize_path("res://")
+	var arguments := PackedStringArray(["-C", repository_root, "ls-tree", "-r", "--full-tree", "HEAD", "--"])
+	for exact_path: String in SOURCE_INPUT_EXACT_PATHS:
+		arguments.append(exact_path)
+	for root_path: String in SOURCE_INPUT_ROOTS:
+		arguments.append(root_path.trim_suffix("/"))
+	var output: Array = []
+	var code := OS.execute("git", arguments, output, true)
+	_assert(code == 0, "exact-HEAD tracked runtime source tree resolves")
+	var blobs: Dictionary = {}
+	if code != 0:
+		return blobs
+	for line: String in String("".join(output)).split("\n", false):
+		var tab_index := line.find("\t")
+		if tab_index < 0:
+			_assert(false, "exact-HEAD tracked runtime tree entry parses")
+			continue
+		var fields := line.substr(0, tab_index).split(" ", false)
+		var relative_path := line.substr(tab_index + 1)
+		if fields.size() != 3 or fields[1] != "blob":
+			_assert(false, "exact-HEAD tracked runtime tree entry is a blob: %s" % relative_path)
+			continue
+		_assert(not blobs.has(relative_path), "exact-HEAD tracked runtime path is unique: %s" % relative_path)
+		blobs[relative_path] = fields[2]
+	return blobs
+
+
+func _untracked_runtime_source_paths() -> Array[String]:
+	var repository_root := ProjectSettings.globalize_path("res://")
+	var arguments := PackedStringArray(["-C", repository_root, "ls-files", "--others", "--exclude-standard", "--"])
+	for exact_path: String in SOURCE_INPUT_EXACT_PATHS:
+		arguments.append(exact_path)
+	for root_path: String in SOURCE_INPUT_ROOTS:
+		arguments.append(root_path.trim_suffix("/"))
+	var output: Array = []
+	var code := OS.execute("git", arguments, output, true)
+	_assert(code == 0, "untracked runtime source query resolves")
+	var paths: Dictionary = {}
+	if code != 0:
+		return []
+	for relative_path: String in String("".join(output)).split("\n", false):
+		var normalized := relative_path.strip_edges().replace("\\", "/")
+		if normalized.is_empty() or normalized.ends_with(".uid"):
+			continue
+		paths[normalized] = true
+	return _sorted_string_keys(paths)
+
+
+func _sorted_string_keys(values: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for value: Variant in values.keys():
+		result.append(String(value))
+	result.sort()
+	return result
+
+
+func _git_object_format(repository_root: String) -> String:
+	var output: Array = []
+	var code := OS.execute("git", PackedStringArray(["-C", repository_root, "rev-parse", "--show-object-format"]), output, true)
+	_assert(code == 0 and not output.is_empty(), "Git object format resolves for exact source bytes")
+	return String("".join(output)).strip_edges() if code == 0 and not output.is_empty() else ""
+
+
+func _git_blob_hash(bytes: PackedByteArray, object_format: String) -> String:
+	var context := HashingContext.new()
+	var start_error := context.start(HashingContext.HASH_SHA1) if object_format == "sha1" else context.start(HashingContext.HASH_SHA256)
+	_assert(start_error == OK, "Git blob hash initializes")
+	if start_error != OK:
+		return ""
+	var header := ("blob %d" % bytes.size()).to_utf8_buffer()
+	header.append(0)
+	_assert(context.update(header) == OK, "Git blob hash accepts header")
+	_assert(context.update(bytes) == OK, "Git blob hash accepts source bytes")
+	return context.finish().hex_encode()
 
 
 func _battlefield_backdrop() -> Node3D:
@@ -1137,6 +1625,23 @@ func _image_is_nonblank(image: Image) -> bool:
 func _sha256(bytes: PackedByteArray) -> String:
 	var context := HashingContext.new()
 	if context.start(HashingContext.HASH_SHA256) != OK or context.update(bytes) != OK: return ""
+	return context.finish().hex_encode()
+
+
+func _sha256_file(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	var context := HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK:
+		file.close()
+		return ""
+	while file.get_position() < file.get_length():
+		var remaining := file.get_length() - file.get_position()
+		if context.update(file.get_buffer(mini(1024 * 1024, remaining))) != OK:
+			file.close()
+			return ""
+	file.close()
 	return context.finish().hex_encode()
 
 

@@ -2,6 +2,7 @@ class_name CombatHudProjection
 extends RefCounted
 
 const MAX_VISIBLE_ALERTS := 3
+const NO_ALERT_SEVERITY := -1
 
 var _members: Array[PartyMemberHudProjection] = []
 var _all_alerts: Array[CombatAlertProjection] = []
@@ -47,6 +48,47 @@ static func create(members_value: Array[PartyMemberHudProjection], all_alerts_va
 
 func copy() -> CombatHudProjection:
 	return create(_members, _all_alerts, elapsed_seconds, experience, experience_next, boss_name, boss_health, boss_max_health)
+
+
+func leader() -> PartyMemberHudProjection:
+	for member: PartyMemberHudProjection in _members:
+		if member != null and member.is_leader:
+			return member.copy()
+	return null
+
+
+func alert_count_for(severity: CombatAlertProjection.Severity) -> int:
+	var count := 0
+	for alert: CombatAlertProjection in _all_alerts:
+		if alert != null and alert.severity == severity:
+			count += 1
+	return count
+
+
+func highest_alert_severity() -> int:
+	var highest := NO_ALERT_SEVERITY
+	for alert: CombatAlertProjection in _all_alerts:
+		if alert != null and _severity_rank(alert.severity) > _severity_rank(highest):
+			highest = alert.severity
+	return highest
+
+
+func highest_severity_alert() -> CombatAlertProjection:
+	var highest := highest_alert_severity()
+	if highest == NO_ALERT_SEVERITY:
+		return null
+	for alert: CombatAlertProjection in _all_alerts:
+		if alert != null and alert.severity == highest:
+			return alert.copy()
+	return null
+
+
+static func _severity_rank(severity: int) -> int:
+	match severity:
+		CombatAlertProjection.Severity.DEAD: return 3
+		CombatAlertProjection.Severity.DOWNED: return 2
+		CombatAlertProjection.Severity.CRITICAL: return 1
+	return 0
 
 
 func validate() -> PackedStringArray:

@@ -1004,6 +1004,8 @@ func _wire_static_ui() -> void:
 		hud.connect("inspect_requested", _on_hud_inspect_requested)
 	if not hud.is_connected("ledger_requested", _on_hud_ledger_requested):
 		hud.connect("ledger_requested", _on_hud_ledger_requested)
+	if not hud.is_connected("collapse_preferences_changed", _on_hud_collapse_preferences_changed):
+		hud.connect("collapse_preferences_changed", _on_hud_collapse_preferences_changed)
 	if not character_ledger.closed.is_connected(_on_hud_ledger_closed):
 		character_ledger.closed.connect(_on_hud_ledger_closed)
 	var selector := _run_setup_lobby()
@@ -1118,6 +1120,21 @@ func _on_hud_ledger_requested(member_id: int, return_focus: Control) -> void:
 
 func _on_hud_ledger_closed(_return_focus: Control, focus_descriptor: Dictionary) -> void:
 	hud.call("restore_focus_descriptor", focus_descriptor)
+
+
+func _on_hud_collapse_preferences_changed(party_collapsed: bool, alerts_collapsed: bool) -> void:
+	if settings_store == null:
+		push_error("PARTY_FORGE_SETTINGS_SAVE_ERROR reason=settings store is missing")
+		return
+	var candidate := saved_settings.copy() if saved_settings != null else PartyForgeSettings.new()
+	candidate.hud_party_collapsed = party_collapsed
+	candidate.hud_alerts_collapsed = alerts_collapsed
+	candidate.normalize()
+	var save_error := settings_store.save_settings(candidate, settings_path)
+	if not save_error.is_empty():
+		push_error(save_error)
+		return
+	saved_settings = candidate.copy()
 
 func _open_settings() -> void:
 	var return_focus := _run_setup_lobby().action_focus(&"settings")

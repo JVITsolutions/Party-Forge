@@ -53,11 +53,81 @@ func _exercise_matrix_row(row: Dictionary) -> void:
 	var settings := _settings(row)
 	var label := String(row["label"])
 	await _exercise_hud(viewport, settings, label)
+	if label in ["normal default", "high contrast"]:
+		await _exercise_header_severity_rendering(viewport, settings, label)
 	await _exercise_level_up(viewport, settings, label)
 	await _exercise_extraction(viewport, settings, label)
 	await _exercise_results(viewport, settings, label)
 	viewport.free()
 	await process_frame
+
+
+func _exercise_header_severity_rendering(viewport: SubViewport, settings: PartyForgeSettings, label: String) -> void:
+	var fixture := _hud_fixture(3)
+	for member_id: int in [2, 3]:
+		(fixture.health_by_member[member_id] as HealthComponent).heal(100.0)
+	(fixture.health_by_member[3] as HealthComponent).apply_damage(80.0)
+	var collapsed_settings := settings.copy()
+	collapsed_settings.hud_party_collapsed = true
+	collapsed_settings.hud_alerts_collapsed = true
+	var hud := HUD_SCENE.instantiate() as HUD
+	hud.custom_viewport = viewport
+	viewport.add_child(hud)
+	(hud.get_node("ClassSelection") as ClassSelectionPanel).close()
+	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, collapsed_settings)
+	if not await _wait_until(func() -> bool: return hud.current_projection != null and hud.current_projection.highest_alert_severity() == CombatAlertProjection.Severity.CRITICAL, "critical collapsed header rendering at %s" % label):
+		hud.free()
+		_cleanup_hud_fixture(fixture)
+		return
+	await process_frame
+	await process_frame
+	_assert_header_severity_pixels(hud, viewport, CombatAlertProjection.Severity.CRITICAL, collapsed_settings.high_contrast, label)
+
+	(fixture.health_by_member[3] as HealthComponent).heal(100.0)
+	(fixture.health_by_member[2] as HealthComponent).apply_damage(1000.0)
+	if await _wait_until(func() -> bool: return hud.current_projection.highest_alert_severity() == CombatAlertProjection.Severity.DOWNED, "downed collapsed header rendering at %s" % label):
+		await process_frame
+		await process_frame
+		_assert_header_severity_pixels(hud, viewport, CombatAlertProjection.Severity.DOWNED, collapsed_settings.high_contrast, label)
+
+	(fixture.health_by_member[1] as HealthComponent).kill()
+	if await _wait_until(func() -> bool: return hud.current_projection.highest_alert_severity() == CombatAlertProjection.Severity.DEAD, "dead collapsed header rendering at %s" % label):
+		await process_frame
+		await process_frame
+		_assert_header_severity_pixels(hud, viewport, CombatAlertProjection.Severity.DEAD, collapsed_settings.high_contrast, label)
+	hud.free()
+	_cleanup_hud_fixture(fixture)
+	await process_frame
+
+
+func _assert_header_severity_pixels(hud: HUD, viewport: SubViewport, severity: int, high_contrast: bool, label: String) -> void:
+	var image := viewport.get_texture().get_image()
+	var expected := LivingForgeTokens.color(&"error", high_contrast)
+	for region: StringName in [&"party", &"alerts"]:
+		var header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button if region == &"party" else hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+		var visual := header.get_node("Visual") as Control
+		var geometry := hud.header_visual_geometry(region)
+		var cue_rect := _visual_global_rect(visual, geometry.get("state_cue_rect", Rect2())).intersection(header.get_global_rect())
+		var header_style := header.get_theme_stylebox(&"normal") as StyleBoxFlat
+		var surface := header_style.bg_color if header_style != null else LivingForgeTokens.color(&"surface_inset", high_contrast)
+		var maximum_contrast := 1.0
+		var closest_semantic_distance := INF
+		for y: int in range(maxi(0, floori(cue_rect.position.y)), mini(image.get_height(), ceili(cue_rect.end.y))):
+			for x: int in range(maxi(0, floori(cue_rect.position.x)), mini(image.get_width(), ceili(cue_rect.end.x))):
+				var pixel := image.get_pixel(x, y)
+				maximum_contrast = maxf(maximum_contrast, _contrast_ratio(pixel, surface))
+				closest_semantic_distance = minf(closest_semantic_distance, Vector3(pixel.r, pixel.g, pixel.b).distance_to(Vector3(expected.r, expected.g, expected.b)))
+		var context := "%s %s %s" % [label, region, _severity_label(severity)]
+		_assert(maximum_contrast >= 3.0, "%s rendered severity icon contrasts with the actual header surface at >=3:1 (actual %.3f)" % [context, maximum_contrast])
+		_assert(closest_semantic_distance <= 0.12, "%s rendered severity icon contains the semantic error tint rather than black (distance %.3f)" % [context, closest_semantic_distance])
+
+
+func _severity_label(severity: int) -> String:
+	match severity:
+		CombatAlertProjection.Severity.CRITICAL: return "CRITICAL"
+		CombatAlertProjection.Severity.DOWNED: return "DOWNED"
+		CombatAlertProjection.Severity.DEAD: return "DEAD"
+	return "ALL CLEAR"
 
 
 func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: String) -> void:
@@ -127,6 +197,76 @@ func _exercise_hud(viewport: SubViewport, settings: PartyForgeSettings, label: S
 	await _assert_navigation_skips_excluded(shell, viewport, overflow, "HUD combat shell", label)
 	_assert_semantic_parity("hud-member", _member_semantic_signature(final_member), label)
 	_assert_semantic_parity("hud-alert", _alert_semantic_signature(visible_alert), label)
+
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	_assert_header_semantic_ownership(party_header, "Party", label)
+	_assert_header_semantic_ownership(alerts_header, "Alerts", label)
+	_assert(party_header.accessibility_description == "Party region is EXPANDED. Activate to COLLAPSE party details.", "expanded Party header exposes exact state/action description at %s" % label)
+	_assert(alerts_header.accessibility_description == "Alerts region is EXPANDED. Activate to COLLAPSE alert details.", "expanded Alerts header exposes exact state/action description at %s" % label)
+	for region: StringName in [&"party", &"alerts"]:
+		var severity_state := hud.header_visual_state(region)
+		_assert(severity_state.get("state_icon") is Texture2D, "HUD %s severity cue draws a visible icon at %s" % [region, label])
+		_assert((severity_state.get("state_color", Color.TRANSPARENT) as Color).is_equal_approx(LivingForgeTokens.color(&"error", settings.high_contrast)), "HUD %s severity icon uses the semantic error token at %s" % [region, label])
+	var party_roots: Array[Control] = [
+		hud.get_node("Margin/CombatStatus/LeaderCard") as Control,
+		hud.get_node("Margin/CombatStatus/Experience") as Control,
+		hud.get_node("Margin/CombatStatus/PartyRegion") as Control,
+	]
+	var focused_party_member_id := int(final_member.get_meta(&"member_id", 0))
+	final_member.grab_focus()
+	final_member = null
+	party_header.pressed.emit()
+	await process_frame
+	_assert(party_header.has_focus(), "collapsed Party moves hidden descendant focus to its accessible header at %s" % label)
+	_assert(party_header.accessibility_description == "Party region is COLLAPSED. Activate to EXPAND party details.", "collapsed Party header exposes exact state/action description at %s" % label)
+	for party_root: Control in party_roots:
+		_assert(_focus_modes_none(party_root), "collapsed Party descendants are unreachable at %s root=%s" % [label, party_root.name])
+		_assert(_accessible_exposure(party_root).is_empty(), "collapsed Party descendants are absent from the accessibility exposure helper at %s root=%s" % [label, party_root.name])
+	party_header.pressed.emit()
+	await process_frame
+	var rebuilt_final_member := _hud_member(hud, focused_party_member_id)
+	var rebuilt_focus_owner := viewport.gui_get_focus_owner() as Control
+	_assert(rebuilt_final_member != null and rebuilt_focus_owner == rebuilt_final_member and rebuilt_focus_owner.is_in_group(&"combat_hud_member") and int(rebuilt_focus_owner.get_meta(&"member_id", 0)) == focused_party_member_id, "expanded Party restores viewport focus to the rebuilt accessible member at %s" % label)
+
+	var inspect := visible_alert.get_node("Surface/Content/Actions/Inspect") as Button
+	inspect.grab_focus()
+	alerts_header.pressed.emit()
+	await process_frame
+	_assert(alerts_header.has_focus(), "collapsed Alerts moves hidden descendant focus to its accessible header at %s" % label)
+	_assert(alerts_header.accessibility_description == "Alerts region is COLLAPSED. Activate to EXPAND alert details.", "collapsed Alerts header exposes exact state/action description at %s" % label)
+	_assert(_focus_modes_none(hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control), "collapsed Alerts descendants are unreachable at %s" % label)
+	_assert(_accessible_exposure(hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).is_empty(), "collapsed Alerts descendants are absent from the accessibility exposure helper at %s" % label)
+	alerts_header.pressed.emit()
+	await process_frame
+	_assert(inspect.has_focus(), "expanded Alerts restores exact accessible action focus at %s" % label)
+	var party_tween := _disclosure_tween_for(hud, &"party")
+	if settings.reduced_motion:
+		_assert(party_tween == null and is_equal_approx(hud.disclosure_rotation_for(&"party"), PI / 2.0), "reduced-motion HUD disclosure has no active Tween and reaches final glyph state at %s" % label)
+	else:
+		_assert(party_tween != null and party_tween.is_valid(), "normal-motion HUD disclosure uses a glyph-only Tween at %s" % label)
+	for member_id: int in range(2, 8):
+		(fixture.health_by_member[member_id] as HealthComponent).heal(100.0)
+	await process_frame
+	for region: StringName in [&"party", &"alerts"]:
+		var clear_state := hud.header_visual_state(region)
+		_assert(bool(clear_state.get("all_clear_visible", false)) and (clear_state.get("state_color", Color.TRANSPARENT) as Color).is_equal_approx(LivingForgeTokens.color(&"valid", settings.high_contrast)), "HUD %s all-clear glyph uses the semantic valid token at %s" % [region, label])
+	(fixture.health_by_member[1] as HealthComponent).kill()
+	party_header.pressed.emit()
+	await process_frame
+	var zero_visual := party_header.get_node("Visual") as Control
+	var zero_state := hud.header_visual_state(&"party")
+	var zero_geometry := hud.header_visual_geometry(&"party")
+	var zero_health_cluster := _visual_global_rect(zero_visual, zero_geometry.get("health_cluster_rect", Rect2()))
+	var zero_health_bar := _visual_global_rect(zero_visual, zero_geometry.get("health_bar_rect", Rect2()))
+	var zero_health_value := _visual_global_rect(zero_visual, zero_geometry.get("health_value_rect", Rect2()))
+	var header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
+	var expected_track_width := 2 if settings.high_contrast else 1
+	_assert(is_zero_approx(float(zero_state.get("health_value", -1.0))) and String(zero_state.get("health_text", "")) == "0 / 100", "collapsed zero-health HUD exposes exact text without fake fill at %s" % label)
+	_assert(zero_health_cluster.encloses(zero_health_bar) and zero_health_cluster.encloses(zero_health_value), "collapsed zero-health bar and text remain contained at %s" % label)
+	_assert(not zero_health_bar.intersection(zero_health_value).has_area(), "collapsed zero-health text never overlaps the track at %s" % label)
+	_assert(int(zero_state.get("track_outline_width", 0)) == expected_track_width, "collapsed zero-health track exposes the required outline width at %s" % label)
+	_assert(header_style != null and _contrast_ratio(zero_state.get("track_outline_color", Color.TRANSPARENT), header_style.bg_color) >= 3.0, "collapsed zero-health track remains distinguishable from its actual header surface at %s" % label)
 
 	hud.free()
 	_cleanup_hud_fixture(fixture)
@@ -237,9 +377,15 @@ func _exercise_extraction(viewport: SubViewport, settings: PartyForgeSettings, l
 	_assert(last.has_focus(), "extraction detail restores exact item 24 focus at %s" % label)
 
 	panel.show_unused_capacity_warning(1, 22, last)
-	var back := panel.get_node("UnusedCapacityWarning/Frame/Actions/Back") as Button
-	var accept := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+	var warning_title := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Title") as Label
+	var warning_message := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Message") as Label
+	var back := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button
+	var accept := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 	await _wait_until(func() -> bool: return back.is_visible_in_tree() and (back.has_focus() or accept.has_focus()), "extraction consequence default focus at %s" % label)
+	_assert(warning_title.accessibility_name == "ACCEPT UNUSED CAPACITY?", "extraction consequence title exposes exact accessible wording at %s" % label)
+	_assert(warning_message.accessibility_name == "You are leaving 1 extraction slot unused. 22 items will be lost.", "extraction consequence body exposes exact accessible wording at %s" % label)
+	_assert_named_action(back, "Back", "extraction consequence safe action", label)
+	_assert_named_action(accept, "Accept Consequence", "extraction consequence primary action", label)
 	_assert(back.has_focus(), "extraction consequence confirmation uses safe Back default at %s" % label)
 	_assert(not accept.has_focus(), "extraction consequence action is never default-focused at %s" % label)
 	back.pressed.emit()
@@ -396,6 +542,20 @@ func _cleanup_hud_fixture(fixture: Dictionary) -> void:
 	(fixture.run as Node).free()
 
 
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var first_luminance := _relative_luminance(first)
+	var second_luminance := _relative_luminance(second)
+	return (maxf(first_luminance, second_luminance) + 0.05) / (minf(first_luminance, second_luminance) + 0.05)
+
+
+func _relative_luminance(value: Color) -> float:
+	return 0.2126 * _linear_channel(value.r) + 0.7152 * _linear_channel(value.g) + 0.0722 * _linear_channel(value.b)
+
+
+func _linear_channel(value: float) -> float:
+	return value / 12.92 if value <= 0.04045 else pow((value + 0.055) / 1.055, 2.4)
+
+
 func _hud_member(hud: HUD, member_id: int) -> ForgePartyMemberCard:
 	for node: Node in hud.get_tree().get_nodes_in_group(&"combat_hud_member"):
 		if node is ForgePartyMemberCard and hud.is_ancestor_of(node) and int(node.get_meta(&"member_id", 0)) == member_id:
@@ -533,6 +693,52 @@ func _assert_hidden_or_disabled_excluded(scope: Node, surface: String, label: St
 			if identity not in violations:
 				violations.append(identity)
 	_assert(violations.is_empty(), "%s hidden/disabled controls use exact FOCUS_NONE and own no focus at %s; controls=%s" % [surface, label, _bounded_names(violations)])
+
+
+func _focus_modes_none(root_control: Control) -> bool:
+	if root_control.focus_mode != Control.FOCUS_NONE:
+		return false
+	for node: Node in root_control.find_children("*", "Control", true, false):
+		if (node as Control).focus_mode != Control.FOCUS_NONE:
+			return false
+	return true
+
+
+func _accessible_exposure(root_control: Control) -> Array[Control]:
+	var exposed: Array[Control] = []
+	var candidates: Array[Control] = [root_control]
+	for node: Node in root_control.find_children("*", "Control", true, false):
+		candidates.append(node as Control)
+	for control: Control in candidates:
+		var semantic_primitive := control is Label or control is Range or control is TextureRect
+		var named_or_focusable := control.focus_mode != Control.FOCUS_NONE or not control.accessibility_name.strip_edges().is_empty()
+		if control.is_visible_in_tree() and (semantic_primitive or named_or_focusable):
+			exposed.append(control)
+	return exposed
+
+
+func _assert_header_semantic_ownership(header: Button, region: String, label: String) -> void:
+	_assert(header.focus_mode == Control.FOCUS_ALL and not header.accessibility_name.strip_edges().is_empty(), "%s header owns the focusable accessible region summary at %s" % [region, label])
+	var decorative_emitters: Array[String] = []
+	for node: Node in header.find_children("*", "Control", true, false):
+		var control := node as Control
+		if control != null and control.is_visible_in_tree() and (control is Label or control is Range or control is TextureRect):
+			decorative_emitters.append(String(control.get_path()))
+	_assert(decorative_emitters.is_empty(), "%s header has no visible Label, Range, or TextureRect accessibility emitters at %s; emitters=%s" % [region, label, decorative_emitters])
+	var visual := header.get_node_or_null("Visual") as Control
+	_assert(visual != null and visual.is_visible_in_tree() and not visual is Label and not visual is Range and not visual is TextureRect and visual.focus_mode == Control.FOCUS_NONE, "%s header uses one visible draw-only Control while the Button owns semantics at %s" % [region, label])
+	_assert(visual != null and visual.accessibility_name.strip_edges().is_empty() and visual.accessibility_description.strip_edges().is_empty(), "%s draw-only visual owns no competing accessible name or description at %s" % [region, label])
+
+
+func _visual_global_rect(visual: Control, local_rect: Rect2) -> Rect2:
+	return Rect2(visual.global_position + local_rect.position, local_rect.size)
+
+
+func _disclosure_tween_for(hud: HUD, region: StringName) -> Tween:
+	var value: Variant = hud.get("_disclosure_tweens")
+	if not value is Dictionary:
+		return null
+	return (value as Dictionary).get(region) as Tween
 
 
 func _bounded_names(names: Array[String], limit := 8) -> String:

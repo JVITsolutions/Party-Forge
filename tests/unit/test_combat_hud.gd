@@ -1,5 +1,8 @@
 extends RefCounted
 
+const ERROR_CAPTURE := preload("res://tests/support/test_error_capture.gd")
+const SCRIPT_ERROR_CAPTURE := preload("res://tests/support/test_script_error_capture.gd")
+
 
 class TestRun:
 	extends Node
@@ -16,9 +19,80 @@ func run() -> Array[String]:
 	_test_scene_contract(failures)
 	_test_party_scale_and_signal_updates(failures)
 	_test_character_hud_background_opacity(failures)
+	_test_collapse_headers_and_independent_state(failures)
+	_test_programmatic_collapse_hydration_preserves_focus(failures)
+	_test_collapsed_summaries_and_dynamic_refresh(failures)
+	_test_frost_mage_recruitment_refresh(failures)
 	_test_alert_surface_and_complete_tray(failures)
 	_test_fail_closed_status_and_pluralization(failures)
 	_test_pause_safe_inspector_and_ledger_routes(failures)
+	return failures
+
+
+func _test_programmatic_collapse_hydration_preserves_focus(failures: Array[String]) -> void:
+	var fixture := _fixture(3)
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "collapse hydration focus fixture configures", failures)
+	if hud == null:
+		_cleanup_fixture(fixture)
+		return
+	var external := Button.new()
+	external.name = "ExternalFocusOwner"
+	external.focus_mode = Control.FOCUS_ALL
+	var descriptor_property_exists := false
+	for property: Dictionary in hud.get_property_list():
+		if StringName(property.get("name", &"")) == &"_collapsed_focus_descriptors":
+			descriptor_property_exists = true
+			break
+	TestAssertions.truthy(descriptor_property_exists, "HUD owns region-local focus descriptors", failures)
+	hud.apply_collapse_preferences(true, true)
+	TestAssertions.equal(external.focus_mode, Control.FOCUS_ALL, "programmatic collapse hydration never mutates external focus eligibility", failures)
+	hud.apply_collapse_preferences(false, false)
+	TestAssertions.equal(external.focus_mode, Control.FOCUS_ALL, "programmatic expansion hydration never mutates external focus eligibility", failures)
+	var member := _member_control(hud, 2)
+	if member != null:
+		TestAssertions.truthy(hud.open_inspector_for_member(2, member), "modal focus fixture opens inspector", failures)
+		var inspector := hud.get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+		var close := inspector.get_node("Overlay/Frame/Layout/Close") as Button
+		var modal_focus_mode := close.focus_mode
+		hud.apply_collapse_preferences(true, true)
+		TestAssertions.equal(close.focus_mode, modal_focus_mode, "programmatic collapse hydration never suspends active modal focus eligibility", failures)
+		inspector.close()
+	external.free()
+	_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
+
+
+func run_scene_tree_focus_hydration_contract(hud: HUD, viewport: SubViewport) -> Array[String]:
+	var failures: Array[String] = []
+	var external := Button.new()
+	external.name = "SceneTreeExternalFocusOwner"
+	external.text = "External"
+	external.focus_mode = Control.FOCUS_ALL
+	external.position = Vector2(720.0, 16.0)
+	external.size = Vector2(160.0, 48.0)
+	viewport.add_child(external)
+	external.grab_focus()
+	TestAssertions.equal(viewport.gui_get_focus_owner(), external, "scene-tree external control owns real viewport focus before hydration", failures)
+	hud.apply_collapse_preferences(true, true)
+	TestAssertions.equal(viewport.gui_get_focus_owner(), external, "programmatic collapse preserves the real external viewport focus owner", failures)
+	hud.apply_collapse_preferences(false, false)
+	TestAssertions.equal(viewport.gui_get_focus_owner(), external, "programmatic expansion preserves the real external viewport focus owner", failures)
+	var member := _member_control(hud, 2)
+	TestAssertions.truthy(member != null, "scene-tree modal hydration fixture exposes member two", failures)
+	if member != null:
+		member.grab_focus()
+		TestAssertions.truthy(hud.open_inspector_for_member(2, member), "scene-tree modal hydration fixture opens the real inspector", failures)
+		var inspector := hud.get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
+		var close := inspector.get_node("Overlay/Frame/Layout/Close") as Button
+		TestAssertions.equal(viewport.gui_get_focus_owner(), close, "real inspector close owns viewport focus before hydration", failures)
+		hud.apply_collapse_preferences(true, true)
+		TestAssertions.equal(viewport.gui_get_focus_owner(), close, "programmatic collapse preserves the real modal viewport focus owner", failures)
+		hud.apply_collapse_preferences(false, false)
+		TestAssertions.equal(viewport.gui_get_focus_owner(), close, "programmatic expansion preserves the real modal viewport focus owner", failures)
+		inspector.close()
+	external.free()
+	hud.apply_collapse_preferences(false, false)
 	return failures
 
 
@@ -57,6 +131,249 @@ func _test_character_hud_background_opacity(failures: Array[String]) -> void:
 	TestAssertions.near(high_contrast_style.bg_color.a if high_contrast_style != null else -1.0, 1.0, 0.001, "high contrast keeps the character HUD surface opaque", failures)
 	_cleanup_hud(high_contrast_hud)
 	_cleanup_fixture(high_contrast_fixture)
+
+
+func _test_collapse_headers_and_independent_state(failures: Array[String]) -> void:
+	var fixture := _fixture(6)
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "collapse-header HUD configures", failures)
+	if hud != null:
+		var party_header := hud.get_node_or_null("Margin/CombatStatus/PartyHeader") as Button
+		var alerts_header := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/Header") as Button
+		var tray_action := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+		TestAssertions.truthy(party_header != null and alerts_header != null and tray_action != null, "HUD exposes both headers and persistent tray action", failures)
+		if tray_action != null:
+			TestAssertions.truthy(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE, "all-clear state keeps the tray action unavailable", failures)
+			TestAssertions.equal(tray_action.pressed.get_connections().size(), 1, "Task 5 connects exactly one shared tray-action route", failures)
+			tray_action.visible = true
+			tray_action.disabled = false
+			tray_action.focus_mode = Control.FOCUS_ALL
+			var tray_rect := tray_action.get_global_rect()
+			TestAssertions.truthy(tray_action.focus_mode == Control.FOCUS_ALL, "eligible tray action is keyboard focusable", failures)
+			TestAssertions.truthy(tray_rect.size.x >= 48.0 and tray_rect.size.y >= 48.0, "eligible tray action has a concrete at-least-48px rect", failures)
+		TestAssertions.truthy(party_header != null and party_header.focus_mode == Control.FOCUS_ALL and alerts_header != null and alerts_header.focus_mode == Control.FOCUS_ALL, "both headers are focusable", failures)
+		TestAssertions.equal(party_header.accessibility_description if party_header != null else "", "Party region is EXPANDED. Activate to COLLAPSE party details.", "expanded Party header describes its state and next action", failures)
+		TestAssertions.equal(alerts_header.accessibility_description if alerts_header != null else "", "Alerts region is EXPANDED. Activate to COLLAPSE alert details.", "expanded Alerts header describes its state and next action", failures)
+		TestAssertions.truthy(hud.has_signal(&"collapse_preferences_changed"), "HUD exposes collapse preference intent signal", failures)
+		var collapse_api := hud.has_method(&"apply_collapse_preferences") and hud.has_method(&"party_collapsed") and hud.has_method(&"alerts_collapsed")
+		TestAssertions.truthy(collapse_api, "HUD exposes independent collapse state API", failures)
+		if collapse_api:
+			var collapse_intents: Array = []
+			if party_header != null and alerts_header != null:
+				hud.collapse_preferences_changed.connect(func(party_value: bool, alerts_value: bool) -> void: collapse_intents.append([party_value, alerts_value]))
+			hud.call(&"apply_collapse_preferences", true, false)
+			TestAssertions.equal([hud.call(&"party_collapsed"), hud.call(&"alerts_collapsed")], [true, false], "Party collapses independently", failures)
+			TestAssertions.equal(collapse_intents, [], "saved collapse hydration does not emit persistence intent", failures)
+			TestAssertions.truthy(not (hud.get_node("Margin/CombatStatus/LeaderCard") as Control).visible, "Party collapse hides leader", failures)
+			TestAssertions.truthy(not (hud.get_node("Margin/CombatStatus/Experience") as Control).visible, "Party collapse hides XP", failures)
+			TestAssertions.truthy(not (hud.get_node("Margin/CombatStatus/PartyRegion") as Control).visible, "Party collapse hides roster", failures)
+			TestAssertions.truthy((hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible, "Party collapse leaves Alerts expanded", failures)
+			if party_header != null and alerts_header != null:
+				party_header.pressed.emit()
+				TestAssertions.equal([hud.call(&"party_collapsed"), hud.call(&"alerts_collapsed")], [false, false], "Party header toggles only Party state", failures)
+				TestAssertions.equal(collapse_intents, [[false, false]], "Party header emits the exact updated persistence intent", failures)
+				alerts_header.pressed.emit()
+				TestAssertions.equal([hud.call(&"party_collapsed"), hud.call(&"alerts_collapsed")], [false, true], "Alerts header toggles only Alerts state", failures)
+				TestAssertions.equal(collapse_intents, [[false, false], [false, true]], "Alerts header emits the exact updated persistence intent", failures)
+		_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
+
+	var alerts_fixture := _fixture(4)
+	(alerts_fixture.settings as PartyForgeSettings).hud_party_collapsed = false
+	(alerts_fixture.settings as PartyForgeSettings).hud_alerts_collapsed = true
+	for member_id: int in range(1, 5):
+		(alerts_fixture.health_by_member[member_id] as HealthComponent).apply_damage(80.0)
+	var alerts_hud := _configured_hud(alerts_fixture)
+	TestAssertions.truthy(alerts_hud != null, "saved alert-collapse HUD configures", failures)
+	if alerts_hud != null:
+		var collapse_api := alerts_hud.has_method(&"apply_collapse_preferences") and alerts_hud.has_method(&"party_collapsed") and alerts_hud.has_method(&"alerts_collapsed")
+		TestAssertions.truthy(collapse_api, "saved settings can apply independent collapse state", failures)
+		if collapse_api:
+			TestAssertions.equal([alerts_hud.call(&"party_collapsed"), alerts_hud.call(&"alerts_collapsed")], [false, true], "saved alert preference leaves Party expanded", failures)
+			TestAssertions.truthy((alerts_hud.get_node("Margin/CombatStatus/LeaderCard") as Control).visible, "saved alert collapse leaves leader visible", failures)
+			TestAssertions.truthy((alerts_hud.get_node("Margin/CombatStatus/Experience") as Control).visible, "saved alert collapse leaves XP visible", failures)
+			TestAssertions.truthy((alerts_hud.get_node("Margin/CombatStatus/PartyRegion") as Control).visible, "saved alert collapse leaves roster visible", failures)
+			TestAssertions.truthy(not (alerts_hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible, "saved alert collapse hides alert cards", failures)
+			var overflow := alerts_hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+			TestAssertions.truthy(not overflow.visible, "saved alert collapse hides overflow", failures)
+			TestAssertions.truthy(overflow.disabled and overflow.focus_mode == Control.FOCUS_NONE, "saved alert collapse disables overflow interaction", failures)
+		var leader := alerts_hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+		var initial_style := (leader.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+		TestAssertions.near(initial_style.bg_color.a if initial_style != null else -1.0, 0.5, 0.001, "collapse setup keeps the default member background opacity", failures)
+		if alerts_hud.has_method(&"apply_visual_settings"):
+			alerts_hud.call(&"apply_visual_settings", (alerts_fixture.settings as PartyForgeSettings).copy())
+		var refreshed_style := (leader.get_node("Surface") as Panel).get_theme_stylebox(&"panel") as StyleBoxFlat
+		TestAssertions.near(refreshed_style.bg_color.a if refreshed_style != null else -1.0, 0.5, 0.001, "live visual settings preserve the default member background opacity", failures)
+		_cleanup_hud(alerts_hud)
+	_cleanup_fixture(alerts_fixture)
+
+
+func _test_collapsed_summaries_and_dynamic_refresh(failures: Array[String]) -> void:
+	var fixture := _fixture(6)
+	(fixture.settings as PartyForgeSettings).hud_party_collapsed = true
+	(fixture.settings as PartyForgeSettings).hud_alerts_collapsed = true
+	(fixture.health_by_member[2] as HealthComponent).kill()
+	(fixture.health_by_member[3] as HealthComponent).apply_damage(100.0)
+	(fixture.health_by_member[4] as HealthComponent).apply_damage(80.0)
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "collapsed-summary HUD configures", failures)
+	if hud == null:
+		_cleanup_fixture(fixture)
+		return
+	var party_visual := hud.get_node_or_null("Margin/CombatStatus/PartyHeader/Visual") as Control
+	var alerts_visual := hud.get_node_or_null("Margin/CombatStatus/AlertRegion/Header/Visual") as Control
+	TestAssertions.truthy(party_visual != null and alerts_visual != null and not party_visual is Label and not party_visual is Range and not party_visual is TextureRect and not alerts_visual is Label and not alerts_visual is Range and not alerts_visual is TextureRect, "both headers use draw-only visual Controls without semantic primitive descendants", failures)
+	var party_state := hud.header_visual_state(&"party")
+	var alerts_state := hud.header_visual_state(&"alerts")
+	var party_summary_text := String(party_state.get("summary", ""))
+	var alerts_summary_text := String(alerts_state.get("summary", ""))
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	TestAssertions.truthy(
+		"PARTY · 6 MEMBERS" in party_summary_text
+		and "LEADER" in party_summary_text
+		and "HIGHEST: DEAD (1)" in party_summary_text
+		and "DOWNED 1" in party_summary_text
+		and "CRITICAL 1" in party_summary_text,
+		"collapsed Party summary exposes exact six-member severity truth",
+		failures,
+	)
+	TestAssertions.truthy("ALERTS 3" in alerts_summary_text and "DEAD" in alerts_summary_text, "collapsed Alerts summary exposes the exact count and highest severity", failures)
+	TestAssertions.truthy(bool(party_state.get("health_visible", false)) and is_equal_approx(float(party_state.get("health_value", -1.0)), 100.0) and is_equal_approx(float(party_state.get("health_max", -1.0)), 100.0), "collapsed Party summary includes exact leader health", failures)
+	TestAssertions.equal(String(party_state.get("health_text", "")), "100 / 100", "collapsed healthy leader exposes exact current and maximum health text", failures)
+	TestAssertions.equal(party_state.get("track_color", Color.TRANSPARENT), LivingForgeTokens.color(&"surface_inset"), "collapsed leader health reuses the inset track token", failures)
+	TestAssertions.equal(int(party_state.get("track_outline_width", 0)), 1, "collapsed leader health uses an exact one-pixel normal-mode track outline", failures)
+	TestAssertions.equal(party_state.get("track_outline_color", Color.TRANSPARENT), LivingForgeTokens.color(&"disabled"), "collapsed leader health uses the non-focus muted semantic outline token", failures)
+	var header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
+	TestAssertions.truthy(header_style != null and _contrast_ratio(party_state.get("track_outline_color", Color.TRANSPARENT), header_style.bg_color) >= 3.0, "collapsed leader health outline separates from the normal header at at least 3:1", failures)
+	TestAssertions.equal(party_state.get("health_fill_color", Color.TRANSPARENT), LivingForgeTokens.color(&"valid"), "healthy collapsed leader health uses the semantic valid fill token", failures)
+	TestAssertions.truthy(party_state.get("state_icon") != null and not bool(party_state.get("all_clear_visible", true)), "Party dead state uses an icon plus visible text", failures)
+	TestAssertions.truthy(alerts_state.get("state_icon") != null and not bool(alerts_state.get("all_clear_visible", true)), "Alerts dead state uses an icon plus visible text", failures)
+	TestAssertions.equal(party_state.get("state_color", Color.TRANSPARENT), LivingForgeTokens.color(&"error"), "Party severity icon uses the normal semantic error token", failures)
+	TestAssertions.equal(alerts_state.get("state_color", Color.TRANSPARENT), LivingForgeTokens.color(&"error"), "Alerts severity icon uses the normal semantic error token", failures)
+	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var projection := hud.current_projection as CombatHudProjection
+	var leader := projection.leader()
+	var highest := projection.highest_severity_alert()
+	var expected_party_accessibility := "Party, 6 members, Leader %s, health 100 of 100, highest severity DEAD, dead 1, downed 1, critical 1, collapsed" % leader.display_name
+	var expected_alerts_accessibility := "Alerts, 3, highest severity DEAD, %s, collapsed" % highest.summary
+	TestAssertions.equal(party_header.accessibility_name, expected_party_accessibility, "Party accessibility includes identity, exact health, severity counts, and collapse state", failures)
+	TestAssertions.equal(alerts_header.accessibility_name, expected_alerts_accessibility, "Alerts accessibility includes exact count, highest summary, and collapse state", failures)
+	TestAssertions.equal(party_header.accessibility_description, "Party region is COLLAPSED. Activate to EXPAND party details.", "collapsed Party header describes its state and next action", failures)
+	TestAssertions.equal(alerts_header.accessibility_description, "Alerts region is COLLAPSED. Activate to EXPAND alert details.", "collapsed Alerts header describes its state and next action", failures)
+	var tray_action := hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	TestAssertions.truthy(tray_action.visible and not tray_action.disabled and tray_action.focus_mode == Control.FOCUS_ALL and tray_action.text == "VIEW ALL ALERTS (3)", "collapsed tray action remains direct and exact", failures)
+	TestAssertions.equal(hud.focus_descriptor_for(tray_action), {"kind": &"named", "named_control": &"alerts_tray_action"}, "tray action owns a stable named focus descriptor", failures)
+	tray_action.pressed.emit()
+	var tray := hud.get_node("CombatAlertTray") as CanvasLayer
+	TestAssertions.truthy(tray.visible, "collapsed tray action opens the shared alert tray", failures)
+	TestAssertions.equal((tray.get_node("Overlay/Frame/Layout/Scroll/Alerts") as Container).get_child_count(), 3, "collapsed tray route passes the complete alert set", failures)
+	tray.call("close")
+	(fixture.health_by_member[1] as HealthComponent).kill()
+	party_state = hud.header_visual_state(&"party")
+	TestAssertions.equal(String(party_state.get("health_text", "")), "0 / 100", "collapsed zero-health leader remains exact and readable", failures)
+	TestAssertions.truthy(is_zero_approx(float(party_state.get("health_value", -1.0))), "collapsed zero-health leader keeps the true zero bar value", failures)
+	TestAssertions.equal(int(party_state.get("track_outline_width", 0)), 1, "zero-health track remains outlined without inventing fill", failures)
+	TestAssertions.equal(party_state.get("health_fill_color", Color.TRANSPARENT), LivingForgeTokens.color(&"error"), "zero-health collapsed leader retains the semantic error fill token", failures)
+	var high_contrast_settings := (fixture.settings as PartyForgeSettings).copy()
+	high_contrast_settings.high_contrast = true
+	hud.apply_visual_settings(high_contrast_settings)
+	party_state = hud.header_visual_state(&"party")
+	alerts_state = hud.header_visual_state(&"alerts")
+	var high_contrast_header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
+	TestAssertions.equal(int(party_state.get("track_outline_width", 0)), 2, "high-contrast zero-health track strengthens its outline to two pixels", failures)
+	TestAssertions.equal(party_state.get("track_outline_color", Color.TRANSPARENT), LivingForgeTokens.color(&"disabled", true), "high-contrast zero-health track uses the high-contrast muted semantic token", failures)
+	TestAssertions.truthy(high_contrast_header_style != null and _contrast_ratio(party_state.get("track_outline_color", Color.TRANSPARENT), high_contrast_header_style.bg_color) >= 3.0, "high-contrast zero-health outline separates from the header at at least 3:1", failures)
+	TestAssertions.equal(party_state.get("health_fill_color", Color.TRANSPARENT), LivingForgeTokens.color(&"error", true), "high-contrast zero-health state preserves the semantic error fill token", failures)
+	TestAssertions.equal(party_state.get("state_color", Color.TRANSPARENT), LivingForgeTokens.color(&"error", true), "Party severity icon uses the high-contrast semantic error token", failures)
+	TestAssertions.equal(alerts_state.get("state_color", Color.TRANSPARENT), LivingForgeTokens.color(&"error", true), "Alerts severity icon uses the high-contrast semantic error token", failures)
+
+	for member_id: int in range(1, 7):
+		var health := fixture.health_by_member[member_id] as HealthComponent
+		health.configure(100.0, member_id == 1, 8.0, 0.5, member_id == 1)
+		health.set_max_health(100.0, false)
+	projection = hud.current_projection as CombatHudProjection
+	leader = projection.leader()
+	TestAssertions.truthy(
+		"HIGHEST: ALL CLEAR (0)" in String(hud.header_visual_state(&"party").get("summary", ""))
+		and "DOWNED 0" in String(hud.header_visual_state(&"party").get("summary", ""))
+		and "CRITICAL 0" in String(hud.header_visual_state(&"party").get("summary", ""))
+		and "HIGHEST: DEAD" not in String(hud.header_visual_state(&"party").get("summary", "")),
+		"all-clear refresh clears stale Party severity copy and counts",
+		failures,
+	)
+	TestAssertions.equal(String(hud.header_visual_state(&"alerts").get("summary", "")), "ALERTS · ALL CLEAR", "all-clear refresh removes stale Alerts severity and highest-summary copy", failures)
+	TestAssertions.equal(
+		party_header.accessibility_name,
+		"Party, 6 members, Leader %s, health 100 of 100, highest severity ALL CLEAR, dead 0, downed 0, critical 0, collapsed" % leader.display_name,
+		"all-clear Party accessibility removes stale semantic severity",
+		failures,
+	)
+	TestAssertions.equal(alerts_header.accessibility_name, "Alerts, all clear, collapsed", "all-clear Alerts accessibility removes stale count and highest summary", failures)
+	TestAssertions.truthy(not tray_action.visible and tray_action.disabled and tray_action.focus_mode == Control.FOCUS_NONE, "all clear hides and disables the tray action", failures)
+	party_state = hud.header_visual_state(&"party")
+	alerts_state = hud.header_visual_state(&"alerts")
+	TestAssertions.truthy(party_state.get("state_icon") == null and bool(party_state.get("all_clear_visible", false)), "all-clear Party cue removes stale icon and shows the clear glyph", failures)
+	TestAssertions.truthy(alerts_state.get("state_icon") == null and bool(alerts_state.get("all_clear_visible", false)), "all-clear Alerts cue removes stale icon and shows the clear glyph", failures)
+	TestAssertions.equal(party_state.get("state_color", Color.TRANSPARENT), LivingForgeTokens.color(&"valid", true), "all-clear Party glyph uses the high-contrast valid token", failures)
+	TestAssertions.equal(alerts_state.get("state_color", Color.TRANSPARENT), LivingForgeTokens.color(&"valid", true), "all-clear Alerts glyph uses the high-contrast valid token", failures)
+	hud.apply_collapse_preferences(false, false)
+	TestAssertions.equal(
+		party_header.accessibility_name,
+		"Party, 6 members, Leader %s, health 100 of 100, highest severity ALL CLEAR, dead 0, downed 0, critical 0, expanded" % leader.display_name,
+		"expanded Party accessibility reports the exact expanded state",
+		failures,
+	)
+	TestAssertions.equal(alerts_header.accessibility_name, "Alerts, all clear, expanded", "expanded Alerts accessibility reports the exact expanded state", failures)
+	TestAssertions.equal(party_header.accessibility_description, "Party region is EXPANDED. Activate to COLLAPSE party details.", "re-expanded Party description reports exact state and action", failures)
+	TestAssertions.equal(alerts_header.accessibility_description, "Alerts region is EXPANDED. Activate to COLLAPSE alert details.", "re-expanded Alerts description reports exact state and action", failures)
+	hud.apply_collapse_preferences(true, true)
+
+	(fixture.health_by_member[4] as HealthComponent).apply_damage(80.0)
+	alerts_summary_text = String(hud.header_visual_state(&"alerts").get("summary", ""))
+	party_summary_text = String(hud.header_visual_state(&"party").get("summary", ""))
+	TestAssertions.truthy("ALERTS 1" in alerts_summary_text and "CRITICAL" in alerts_summary_text, "new collapsed alert updates the summary immediately", failures)
+	TestAssertions.truthy("HIGHEST: CRITICAL (1)" in party_summary_text and "DEAD 0" in party_summary_text and "DOWNED 0" in party_summary_text and "CRITICAL 1" not in party_summary_text, "critical-only collapsed hierarchy names the highest count once and retains the other exact counts", failures)
+	TestAssertions.truthy(hud.alerts_collapsed() and not (hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control).visible, "new alert never auto-expands collapsed Alerts", failures)
+	TestAssertions.truthy(tray_action.visible and tray_action.text == "VIEW ALL ALERTS (1)", "new collapsed alert refreshes persistent tray access", failures)
+	(fixture.health_by_member[4] as HealthComponent).apply_damage(20.0)
+	party_summary_text = String(hud.header_visual_state(&"party").get("summary", ""))
+	TestAssertions.truthy("HIGHEST: DOWNED (1)" in party_summary_text and "DEAD 0" in party_summary_text and "CRITICAL 0" in party_summary_text and "DOWNED 1" not in party_summary_text, "downed-only collapsed hierarchy names the highest count once and retains the other exact counts", failures)
+	_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
+
+
+func _test_frost_mage_recruitment_refresh(failures: Array[String]) -> void:
+	var fixture := _fixture(1, true, 2)
+	(fixture.settings as PartyForgeSettings).hud_party_collapsed = true
+	var hud := _configured_hud(fixture)
+	TestAssertions.truthy(hud != null, "Frost Mage recruitment HUD configures", failures)
+	if hud == null:
+		_cleanup_fixture(fixture)
+		return
+	var errors := ERROR_CAPTURE.new()
+	var script_errors := SCRIPT_ERROR_CAPTURE.new()
+	OS.add_logger(errors)
+	OS.add_logger(script_errors)
+	var catalog := GameCatalog.load_defaults()
+	var recruited := (fixture.party as PartyManager).recruit(catalog.class_by_id(&"frost_mage"))
+	var frost_member := (fixture.party as PartyManager).members[-1] as PartyMemberState
+	var actor := _bind_health_actor(fixture.context as PlayerRunContext, frost_member.member_id, frost_member.class_definition.max_health)
+	(fixture.actors as Array).append(actor)
+	(fixture.health_by_member as Dictionary)[frost_member.member_id] = actor.get_node("HealthComponent") as HealthComponent
+	OS.remove_logger(script_errors)
+	OS.remove_logger(errors)
+	var captured := errors.drain_after_detach()
+	var captured_scripts := script_errors.drain_after_detach()
+	TestAssertions.truthy(recruited and frost_member.class_definition.id == &"frost_mage", "real PartyManager recruitment commits Frost Mage", failures)
+	TestAssertions.truthy(captured_scripts.is_empty(), "Frost Mage recruitment produces no script error: %s" % captured_scripts, failures)
+	TestAssertions.truthy(not _contains_message(captured, "COMBAT_HUD_UNAVAILABLE"), "Frost Mage recruitment produces no transient HUD-unavailable state: %s" % captured, failures)
+	var frost_actor := (fixture.context as PlayerRunContext).actor_for(frost_member.member_id)
+	var frost_health := frost_actor.get_node_or_null("HealthComponent") as HealthComponent if frost_actor != null else null
+	TestAssertions.truthy(frost_actor != null and frost_health != null and frost_health.max_health > 0.0, "Frost Mage recruitment completes actor and health binding", failures)
+	TestAssertions.equal((hud.current_projection as CombatHudProjection).members.size() if hud.current_projection != null else 0, 2, "Frost Mage binding refreshes complete HUD projection truth", failures)
+	TestAssertions.truthy("PARTY · 2 MEMBERS" in String(hud.header_visual_state(&"party").get("summary", "")), "collapsed Party summary updates after Frost Mage recruitment", failures)
+	_cleanup_hud(hud)
+	_cleanup_fixture(fixture)
 
 
 func _test_scene_contract(failures: Array[String]) -> void:
@@ -243,12 +560,26 @@ func _test_fail_closed_status_and_pluralization(failures: Array[String]) -> void
 	_cleanup_hud(missing_hud)
 	_cleanup_fixture(missing_health)
 
+	var stale_fixture := _fixture(2)
+	(stale_fixture.health_by_member[2] as HealthComponent).apply_damage(80.0)
+	var stale_hud := _configured_hud(stale_fixture)
+	stale_hud.call("_disconnect_health", 1)
+	stale_hud.call("_refresh_projection", false)
+	var stale_summary := String(stale_hud.header_visual_state(&"alerts").get("summary", ""))
+	TestAssertions.truthy("UNAVAILABLE" in stale_summary and "CRITICAL" not in stale_summary, "invalid authority clears stale projected header truth", failures)
+	_cleanup_hud(stale_hud)
+	_cleanup_fixture(stale_fixture)
+
 
 func _assert_unavailable(hud: HUD, reason_fragment: String, message: String, failures: Array[String]) -> void:
 	var unavailable := hud.get_node_or_null("Margin/CombatStatus/HudUnavailable") as Label
 	TestAssertions.truthy(unavailable != null and unavailable.visible, message, failures)
 	if unavailable != null:
 		TestAssertions.truthy(unavailable.text.begins_with("HUD unavailable:") and reason_fragment in unavailable.text.to_lower(), "%s has a concise reason" % message, failures)
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	TestAssertions.equal(party_header.accessibility_description, "Party region is UNAVAILABLE and EXPANDED. Activate to COLLAPSE party details.", "%s gives Party an exact unavailable state/action description" % message, failures)
+	TestAssertions.equal(alerts_header.accessibility_description, "Alerts region is UNAVAILABLE and EXPANDED. Activate to COLLAPSE alert details.", "%s gives Alerts an exact unavailable state/action description" % message, failures)
 
 
 func _test_pause_safe_inspector_and_ledger_routes(failures: Array[String]) -> void:
@@ -305,11 +636,11 @@ func _test_pause_safe_inspector_and_ledger_routes(failures: Array[String]) -> vo
 	tree.paused = false
 
 
-func _fixture(count: int, bind_actors: bool = true) -> Dictionary:
+func _fixture(count: int, bind_actors: bool = true, capacity: int = -1) -> Dictionary:
 	_fixture_sequence += 1
 	var catalog := GameCatalog.load_defaults()
 	var party := PartyManager.new()
-	party.configure_capacity(PartyCapacityPolicy.new(count))
+	party.configure_capacity(PartyCapacityPolicy.new(count if capacity < 0 else capacity))
 	party.configure_identity(_fixture_sequence, catalog.generic_name_pool)
 	party.initialize(catalog.class_by_id(&"fighter"), catalog.traits)
 	for _index: int in range(count - 1):
@@ -405,6 +736,27 @@ func _tray_card(tray: CanvasLayer, stable_id: StringName) -> Control:
 		if StringName(child.get_meta("stable_alert_id", &"")) == stable_id:
 			return child as Control
 	return null
+
+
+func _contains_message(messages: PackedStringArray, marker: String) -> bool:
+	for message: String in messages:
+		if marker in message:
+			return true
+	return false
+
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var first_luminance := _relative_luminance(first)
+	var second_luminance := _relative_luminance(second)
+	return (maxf(first_luminance, second_luminance) + 0.05) / (minf(first_luminance, second_luminance) + 0.05)
+
+
+func _relative_luminance(value: Color) -> float:
+	return 0.2126 * _linear_channel(value.r) + 0.7152 * _linear_channel(value.g) + 0.0722 * _linear_channel(value.b)
+
+
+func _linear_channel(value: float) -> float:
+	return value / 12.92 if value <= 0.04045 else pow((value + 0.055) / 1.055, 2.4)
 
 
 func _ledger_health(member_id: int, fixture: Dictionary) -> Dictionary:

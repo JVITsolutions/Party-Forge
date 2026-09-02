@@ -3,6 +3,12 @@ extends RefCounted
 func run() -> Array[String]:
 	var failures: Array[String] = []
 	_test_copy_owned_members_and_alerts(failures)
+	var summary_probe := CombatHudProjection.create([], [], 0.0, 0, 0, "", 0.0, 0.0)
+	if _summary_accessors_exist(summary_probe, failures):
+		_test_projection_summary_accessors(failures)
+		_test_alert_count_summary_accessor(failures)
+		_test_highest_alert_severity_summary_accessor(failures)
+		_test_highest_severity_alert_summary_accessor(failures)
 	_test_projection_validation(failures)
 	return failures
 
@@ -28,6 +34,73 @@ func _test_copy_owned_members_and_alerts(failures: Array[String]) -> void:
 	TestAssertions.equal(projection.members[0].display_name, "Member 1", "copy owns nested members", failures)
 	TestAssertions.equal(projection.all_alerts[0].summary, "Member 3 is dead", "copy owns nested alerts", failures)
 	TestAssertions.equal(projection.validate(), PackedStringArray(), "valid projection has no errors", failures)
+
+
+func _test_projection_summary_accessors(failures: Array[String]) -> void:
+	var leader_member := PartyMemberHudProjection.create(1, "Mira", &"fighter", "Fighter", 4, 1, 72.0, 100.0, true, false, false)
+	var follower_member := PartyMemberHudProjection.create(2, "Rowan", &"ranger", "Ranger", 3, 1, 40.0, 100.0, false, false, false)
+	var alerts: Array[CombatAlertProjection] = [
+		CombatAlertProjection.create(&"critical:001", 1, &"critical_health", "Mira is critical", "Health is low", CombatAlertProjection.Severity.CRITICAL, true, false),
+		CombatAlertProjection.create(&"critical:002", 2, &"critical_health", "Rowan is critical", "Health is low", CombatAlertProjection.Severity.CRITICAL, true, false),
+		CombatAlertProjection.create(&"downed:003", 2, &"downed_or_dying", "Rowan is downed", "Needs revival", CombatAlertProjection.Severity.DOWNED, true, true),
+		CombatAlertProjection.create(&"dead:004", 2, &"downed_or_dying", "Rowan is dead", "No longer active", CombatAlertProjection.Severity.DEAD, true, true),
+	]
+	var projection := CombatHudProjection.create([leader_member, follower_member], alerts, 0.0, 0, 0, "", 0.0, 0.0)
+	if not _summary_accessors_exist(projection, failures):
+		return
+	var leader: PartyMemberHudProjection = projection.leader()
+	TestAssertions.equal([leader.member_id, leader.display_name, leader.health, leader.max_health], [1, "Mira", 72.0, 100.0], "summary exposes defensive leader truth", failures)
+	TestAssertions.equal([
+		projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL),
+		projection.alert_count_for(CombatAlertProjection.Severity.DOWNED),
+		projection.alert_count_for(CombatAlertProjection.Severity.DEAD),
+	], [2, 1, 1], "summary counts every exact severity", failures)
+	TestAssertions.equal(projection.highest_alert_severity(), CombatAlertProjection.Severity.DEAD, "dead outranks downed and critical", failures)
+	TestAssertions.equal(projection.highest_severity_alert().stable_id, &"dead:004", "highest summary selects the first exact highest-severity alert", failures)
+	leader.display_name = "mutated"
+	TestAssertions.equal(projection.leader().display_name, "Mira", "leader accessor returns a defensive copy", failures)
+	var highest_alert: CombatAlertProjection = projection.highest_severity_alert()
+	highest_alert.summary = "mutated"
+	TestAssertions.equal(projection.highest_severity_alert().summary, "Rowan is dead", "highest alert accessor returns a defensive copy", failures)
+
+	var empty_alert_projection := CombatHudProjection.create([leader_member], [], 0.0, 0, 0, "", 0.0, 0.0)
+	TestAssertions.equal(empty_alert_projection.highest_alert_severity(), -1, "empty alerts expose no severity", failures)
+	TestAssertions.equal(empty_alert_projection.highest_severity_alert(), null, "empty alerts expose no highest alert", failures)
+	TestAssertions.equal([
+		empty_alert_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL),
+		empty_alert_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED),
+		empty_alert_projection.alert_count_for(CombatAlertProjection.Severity.DEAD),
+	], [0, 0, 0], "empty alerts have zero counts", failures)
+
+
+func _test_alert_count_summary_accessor(failures: Array[String]) -> void:
+	var projection := CombatHudProjection.create([], [], 0.0, 0, 0, "", 0.0, 0.0)
+	if not _summary_accessors_exist(projection, failures):
+		return
+	TestAssertions.equal(projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL), 0, "summary count accessor handles an empty alert set", failures)
+
+
+func _test_highest_alert_severity_summary_accessor(failures: Array[String]) -> void:
+	var projection := CombatHudProjection.create([], [], 0.0, 0, 0, "", 0.0, 0.0)
+	if not _summary_accessors_exist(projection, failures):
+		return
+	TestAssertions.equal(projection.highest_alert_severity(), -1, "summary severity accessor handles an empty alert set", failures)
+
+
+func _test_highest_severity_alert_summary_accessor(failures: Array[String]) -> void:
+	var projection := CombatHudProjection.create([], [], 0.0, 0, 0, "", 0.0, 0.0)
+	if not _summary_accessors_exist(projection, failures):
+		return
+	TestAssertions.equal(projection.highest_severity_alert(), null, "summary alert accessor handles an empty alert set", failures)
+
+
+func _summary_accessors_exist(projection: CombatHudProjection, failures: Array[String]) -> bool:
+	var all_present := true
+	for method_name: StringName in [&"leader", &"alert_count_for", &"highest_alert_severity", &"highest_severity_alert"]:
+		var present := projection.has_method(method_name)
+		TestAssertions.truthy(present, "projection exposes summary accessor %s" % method_name, failures)
+		all_present = all_present and present
+	return all_present
 
 
 func _test_projection_validation(failures: Array[String]) -> void:

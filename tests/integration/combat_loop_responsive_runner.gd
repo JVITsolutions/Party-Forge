@@ -6,6 +6,7 @@ const VIEWPORT_SIZES: Array[Vector2i] = [
 	Vector2i(2560, 1440),
 	Vector2i(3840, 2160),
 	Vector2i(2560, 1080),
+	Vector2i(3440, 1440),
 ]
 const PARTY_COUNTS: Array[int] = [1, 6, 7, 12, 20, 24]
 const SCALE_CORNERS: Array[Vector2i] = [
@@ -13,6 +14,12 @@ const SCALE_CORNERS: Array[Vector2i] = [
 	Vector2i(100, 150),
 	Vector2i(150, 150),
 	Vector2i(80, 150),
+]
+const COLLAPSE_STATES: Array[Vector2i] = [
+	Vector2i(1, 0),
+	Vector2i(0, 1),
+	Vector2i(1, 1),
+	Vector2i(0, 0),
 ]
 const RESULT_FIXTURE_PATH := "res://tests/unit/test_run_recap_projection.gd"
 const CONDITION_DEADLINE_MS := 2500
@@ -36,13 +43,15 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	await _exercise_primary_action_bar()
 	for viewport_size: Vector2i in VIEWPORT_SIZES:
 		if viewport_size == Vector2i(1920, 1080):
 			for party_count: int in PARTY_COUNTS:
 				await _exercise_hud(viewport_size, party_count, 0, 100, 100)
+			await _exercise_hud(viewport_size, 6, 3, 100, 100)
 		else:
 			await _exercise_hud(viewport_size, 6, 0, 100, 100)
-			await _exercise_hud(viewport_size, 24, 6, 100, 100)
+			await _exercise_hud(viewport_size, 24, 7, 100, 100)
 		if viewport_size == Vector2i(1280, 720):
 			for alert_count: int in [1, 3, 4]:
 				await _exercise_hud(viewport_size, 6, alert_count, 100, 100)
@@ -50,13 +59,127 @@ func _run() -> void:
 		await _exercise_extraction(viewport_size, 100, 100)
 		await _exercise_result(viewport_size, 100, 100)
 	for scale_corner: Vector2i in SCALE_CORNERS:
-		await _exercise_hud(Vector2i(1280, 720), 24, 6, scale_corner.x, scale_corner.y)
+		await _exercise_hud(Vector2i(1280, 720), 24, 7, scale_corner.x, scale_corner.y)
 		await _exercise_level_up(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		await _exercise_extraction(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y)
 		if _long_detail_corner(Vector2i(1280, 720), scale_corner.x, scale_corner.y):
 			await _exercise_result(Vector2i(1280, 720), scale_corner.x, scale_corner.y, true)
+	await _exercise_zero_health_collapsed_track(false)
+	await _exercise_zero_health_collapsed_track(true)
 	_finish()
+
+
+func _assert_hud_collapse_geometry(hud: HUD, viewport_rect: Rect2, party_count: int, alert_count: int, party_collapsed: bool, alerts_collapsed: bool, ui_scale: int, text_scale: int, context_label: String) -> void:
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var party_visual := hud.get_node("Margin/CombatStatus/PartyHeader/Visual") as Control
+	var party_state := hud.header_visual_state(&"party")
+	var party_geometry := hud.header_visual_geometry(&"party")
+	var leader := hud.get_node("Margin/CombatStatus/LeaderCard") as Control
+	var experience := hud.get_node("Margin/CombatStatus/Experience") as Control
+	var party_region := hud.get_node("Margin/CombatStatus/PartyRegion") as Control
+	var timer := hud.get_node("Margin/CombatStatus/RunTime") as Control
+	var alert_region := hud.get_node("Margin/CombatStatus/AlertRegion") as Control
+	var alerts_header := hud.get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var alerts_visual := hud.get_node("Margin/CombatStatus/AlertRegion/Header/Visual") as Control
+	var alerts_geometry := hud.header_visual_geometry(&"alerts")
+	var alerts_stack := hud.get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
+	var overflow := hud.get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray_action := hud.get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	for header: Button in [party_header, alerts_header]:
+		_assert_contained(header, viewport_rect, "%s %s" % [context_label, header.name])
+		_assert(header.get_global_rect().size.x >= 48.0 and header.get_global_rect().size.y >= 48.0, "%s %s keeps a real 48x48 target" % [context_label, header.name])
+	var party_summary_rect := _visual_global_rect(party_visual, party_geometry.get("summary_rect", Rect2()))
+	var alerts_summary_rect := _visual_global_rect(alerts_visual, alerts_geometry.get("summary_rect", Rect2()))
+	_assert(party_header.get_global_rect().encloses(party_summary_rect), "%s Party summary remains inside its header header=%s summary=%s" % [context_label, party_header.get_global_rect(), party_summary_rect])
+	_assert(alerts_header.get_global_rect().encloses(alerts_summary_rect), "%s Alerts summary remains inside its header header=%s summary=%s" % [context_label, alerts_header.get_global_rect(), alerts_summary_rect])
+	_assert(bool(party_state.get("health_visible", false)) == party_collapsed, "%s compact leader health visibility follows Party collapse" % context_label)
+	if bool(party_state.get("health_visible", false)):
+		var header_rect := party_header.get_global_rect()
+		var cluster_rect := _visual_global_rect(party_visual, party_geometry.get("health_cluster_rect", Rect2()))
+		_assert(header_rect.encloses(cluster_rect), "%s compact leader health cluster remains inside Party header header=%s cluster=%s" % [context_label, header_rect, cluster_rect])
+		var projected_leader := hud.current_projection.leader() if hud.current_projection != null else null
+		var expected_health_text := "%d / %d" % [roundi(projected_leader.health), roundi(projected_leader.max_health)] if projected_leader != null else ""
+		var bar_rect := _visual_global_rect(party_visual, party_geometry.get("health_bar_rect", Rect2()))
+		var value_rect := _visual_global_rect(party_visual, party_geometry.get("health_value_rect", Rect2()))
+		_assert(cluster_rect.encloses(bar_rect) and cluster_rect.encloses(value_rect), "%s collapsed health bar and exact value remain enclosed by the cluster" % context_label)
+		_assert(not bar_rect.intersection(value_rect).has_area(), "%s collapsed health bar and exact value never overlap" % context_label)
+		_assert(String(party_state.get("health_text", "")) == expected_health_text, "%s collapsed leader health exposes exact readable current and maximum expected=%s actual=%s" % [context_label, expected_health_text, party_state.get("health_text", "")])
+		if text_scale == 150:
+			_assert(absf(cluster_rect.get_center().y - header_rect.get_center().y) <= 1.0, "%s Text150 health cluster remains vertically centered header=%s cluster=%s" % [context_label, header_rect, cluster_rect])
+			_assert(cluster_rect.position.y - header_rect.position.y >= 4.0 and header_rect.end.y - cluster_rect.end.y >= 4.0, "%s Text150 health cluster remains away from the header border" % context_label)
+			_assert(value_rect.size.y >= float(party_geometry.get("health_value_font_height", 0.0)), "%s Text150 exact health value is fully readable" % context_label)
+	if text_scale == 150:
+		for geometry: Dictionary in [party_geometry, alerts_geometry]:
+			var lines := geometry.get("summary_lines", []) as Array
+			var summary_rect := geometry.get("summary_rect", Rect2()) as Rect2
+			_assert(not lines.is_empty(), "%s draw-only header computes wrapped summary lines at Text150" % context_label)
+			_assert(summary_rect.size.y + 0.5 >= float(lines.size()) * float(geometry.get("font_height", 0.0)), "%s draw-only header exposes every wrapped line at Text150" % context_label)
+	var party_chain: Array[Control] = [party_header]
+	if not party_collapsed:
+		party_chain.append_array([leader, experience, party_region])
+		_assert(leader.visible and experience.visible and party_region.visible, "%s expanded Party exposes leader, XP, and roster" % context_label)
+	else:
+		_assert(not leader.visible and not experience.visible and not party_region.visible, "%s collapsed Party hides leader, XP, and roster" % context_label)
+	var party_rects: Array[Rect2] = []
+	for control: Control in party_chain:
+		_assert_contained(control, viewport_rect, "%s %s" % [context_label, control.name])
+		_assert_no_overlap(control.get_global_rect(), party_rects, "%s Party header/leader/XP/roster chain" % context_label)
+		party_rects.append(control.get_global_rect())
+		_assert(not control.get_global_rect().intersection(timer.get_global_rect()).has_area(), "%s %s does not overlap timer" % [context_label, control.name])
+		_assert(not control.get_global_rect().intersection(alert_region.get_global_rect()).has_area(), "%s %s does not overlap Alerts" % [context_label, control.name])
+	_assert_contained(alert_region, viewport_rect, "%s AlertRegion" % context_label)
+	var alert_controls: Array[Control] = [alerts_header]
+	var rendered_count := 0
+	for child: Node in alerts_stack.get_children():
+		if child is Control and (child as Control).is_visible_in_tree():
+			rendered_count += 1
+			alert_controls.append(child as Control)
+	if overflow.visible:
+		alert_controls.append(overflow)
+	if tray_action.visible:
+		alert_controls.append(tray_action)
+	var alert_rects: Array[Rect2] = []
+	for control: Control in alert_controls:
+		_assert_contained(control, alert_region.get_global_rect(), "%s %s" % [context_label, control.name])
+		_assert_no_overlap(control.get_global_rect(), alert_rects, "%s Alerts header/cards/overflow/tray" % context_label)
+		alert_rects.append(control.get_global_rect())
+	if tray_action.visible:
+		_assert(tray_action.get_global_rect().size.x >= 48.0 and tray_action.get_global_rect().size.y >= 48.0, "%s tray action keeps a real 48x48 target" % context_label)
+		var header_rect := alerts_header.get_global_rect()
+		var tray_rect := tray_action.get_global_rect()
+		var stack_rect := alerts_stack.get_global_rect()
+		var compact_gap := float(LivingForgeTokens.spacing(&"compact"))
+		var authentic_inline_corner := alerts_collapsed \
+			and alert_count > 0 \
+			and ui_scale == 100 \
+			and text_scale == 100 \
+			and viewport_rect.size in [Vector2(1920, 1080), Vector2(3440, 1440)]
+		if authentic_inline_corner:
+			var rendered_summary := String(hud.header_visual_state(&"alerts").get("summary", ""))
+			_assert(rendered_summary.begins_with("ALERTS %d · " % alert_count) and "CRITICAL" in rendered_summary, "%s authentic collapsed projection supplies its complete alert count, severity, and summary text: %s" % [context_label, rendered_summary])
+			_assert(tray_action.text == "VIEW ALL ALERTS (%d)" % alert_count, "%s authentic tray retains its exact complete-count label" % context_label)
+			_assert(absf(header_rect.position.y - tray_rect.position.y) <= 1.0, "%s fitting Alerts header and tray share one row header=%s tray=%s" % [context_label, header_rect, tray_rect])
+			_assert(header_rect.end.x + compact_gap <= tray_rect.position.x + 1.0, "%s fitting Alerts header and tray retain their horizontal gap" % context_label)
+		if alerts_collapsed and viewport_rect.size == Vector2(1280, 720) and ui_scale == 150 and text_scale == 150:
+			_assert(absf(tray_rect.position.y - (header_rect.end.y + compact_gap)) <= 1.0, "%s constrained Text150 tray wraps immediately below the Alerts header header=%s tray=%s" % [context_label, header_rect, tray_rect])
+		_assert(stack_rect.position.y + 1.0 >= maxf(header_rect.end.y, tray_rect.end.y) + compact_gap, "%s ExpandedAlerts begins after the lower header/tray edge" % context_label)
+	_assert(tray_action.visible == (alert_count > 0), "%s persistent tray availability matches exact alert truth" % context_label)
+	_assert(rendered_count == 0 if alerts_collapsed else rendered_count <= mini(alert_count, CombatHudProjection.MAX_VISIBLE_ALERTS), "%s expanded card count respects collapsed state and projection cap" % context_label)
+	var hidden_count := alert_count - rendered_count
+	_assert(overflow.visible == (not alerts_collapsed and hidden_count > 0), "%s overflow visibility matches exact rendered budget" % context_label)
+	if overflow.visible:
+		_assert(overflow.get_global_rect().size.x >= 48.0 and overflow.get_global_rect().size.y >= 48.0, "%s overflow keeps a real 48x48 target" % context_label)
+		_assert(overflow.text == "+%d %s" % [hidden_count, "alert" if hidden_count == 1 else "alerts"], "%s overflow names the exact hidden alert count" % context_label)
+		_assert(absf(overflow.get_global_rect().end.y - alert_region.get_global_rect().end.y) <= 1.0, "%s overflow remains reserved against the bottom edge" % context_label)
+		for child: Node in alerts_stack.get_children():
+			if child is Control and (child as Control).is_visible_in_tree():
+				_assert((child as Control).get_global_rect().end.y <= overflow.get_global_rect().position.y + 1.0, "%s rendered alert cards do not enter the reserved overflow row card=%s overflow=%s" % [context_label, (child as Control).get_global_rect(), overflow.get_global_rect()])
+	var metrics := hud.get("_metrics") as CombatHudResponsiveLayout.Metrics
+	_assert(metrics != null and metrics.visible_member_count >= 1, "%s paging keeps at least one visible member" % context_label)
+	if metrics != null:
+		_assert(metrics.page_count == maxi(1, ceili(float(party_count) / float(metrics.visible_member_count))), "%s paging count matches the exact visible window" % context_label)
+		_assert(metrics.clamped_page(metrics.page_count - 1) == metrics.page_count - 1, "%s final compact page remains reachable" % context_label)
 
 
 func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, ui_scale: int, text_scale: int) -> void:
@@ -83,6 +206,21 @@ func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, 
 	var expected_metrics := CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, party_count)
 	var rich_expected := expected_metrics.mode == CombatHudResponsiveLayout.Mode.RICH
 	await _wait_for_stable_layout([shell, leader, party_region, alert_region], context_label)
+	for state: Vector2i in COLLAPSE_STATES:
+		hud.apply_collapse_preferences(state.x == 1, state.y == 1)
+		await process_frame
+		await process_frame
+		var collapse_context := _context(
+			"HUD_COLLAPSE",
+			viewport_size,
+			ui_scale,
+			text_scale,
+			"party=%d alerts=%d party_collapsed=%s alerts_collapsed=%s" % [party_count, alert_count, state.x == 1, state.y == 1],
+		)
+		_assert_hud_collapse_geometry(hud, viewport_rect, party_count, alert_count, state.x == 1, state.y == 1, ui_scale, text_scale, collapse_context)
+	var measured_party_header := (hud.get_node("Margin/CombatStatus/PartyHeader") as Button).size.y
+	expected_metrics = CombatHudResponsiveLayout.resolve(viewport_size, ui_scale, text_scale, party_count, measured_party_header)
+	rich_expected = expected_metrics.mode == CombatHudResponsiveLayout.Mode.RICH
 	for control: Control in [shell, leader, party_region, alert_region]:
 		_assert_contained(control, viewport_rect, "%s %s" % [context_label, control.name])
 	_assert(not leader.get_global_rect().intersection(alert_region.get_global_rect()).has_area(), "%s leader and alert region do not overlap" % context_label)
@@ -202,9 +340,48 @@ func _exercise_hud(viewport_size: Vector2i, party_count: int, alert_count: int, 
 	var visible_hud_actions := _visible_buttons(hud.get_node("Margin/CombatStatus") as Control)
 	_assert_controls_within_owning_surface(visible_hud_actions, viewport_rect, "%s visible actions" % context_label)
 	hud.free()
+	_cleanup_hud_fixture(fixture)
 	viewport.free()
 	_active_viewport = null
+
+
+func _exercise_zero_health_collapsed_track(high_contrast: bool) -> void:
+	var viewport_size := Vector2i(1280, 720)
+	var viewport := _new_viewport(viewport_size)
+	var fixture := _hud_fixture(24, 7, 100, 150)
+	(fixture.settings as PartyForgeSettings).high_contrast = high_contrast
+	(fixture.health_by_member[1] as HealthComponent).kill()
+	var context_label := "HUD_ZERO_HEALTH_720P_TEXT150 high_contrast=%s" % high_contrast
+	var hud := (load("res://scenes/ui/hud.tscn") as PackedScene).instantiate() as HUD
+	hud.custom_viewport = viewport
+	viewport.add_child(hud)
+	hud.configure(fixture.run, fixture.party, fixture.experience, fixture.context, fixture.settings)
+	await _wait_until(func() -> bool:
+		return hud.current_projection != null and hud.current_projection.leader() != null and is_zero_approx(hud.current_projection.leader().health)
+	, "%s authoritative zero-health projection" % context_label)
+	hud.apply_collapse_preferences(true, true)
+	var party_header := hud.get_node("Margin/CombatStatus/PartyHeader") as Button
+	var visual := hud.get_node("Margin/CombatStatus/PartyHeader/Visual") as Control
+	await _wait_for_stable_layout([party_header, visual], context_label)
+	var state := hud.header_visual_state(&"party")
+	var geometry := hud.header_visual_geometry(&"party")
+	var header_rect := party_header.get_global_rect()
+	var cluster_rect := _visual_global_rect(visual, geometry.get("health_cluster_rect", Rect2()))
+	var bar_rect := _visual_global_rect(visual, geometry.get("health_bar_rect", Rect2()))
+	var value_rect := _visual_global_rect(visual, geometry.get("health_value_rect", Rect2()))
+	_assert(header_rect.encloses(cluster_rect) and cluster_rect.encloses(bar_rect), "%s actual Bar remains fully enclosed header=%s cluster=%s bar=%s" % [context_label, header_rect, cluster_rect, bar_rect])
+	_assert(bar_rect.size.x >= 96.0 and bar_rect.size.y >= 12.0, "%s actual Bar keeps at least 96x12 geometry: %s" % [context_label, bar_rect])
+	_assert(is_zero_approx(float(state.get("health_value", -1.0))) and String(state.get("health_text", "")) == "0 / 100", "%s preserves true zero and exact 0 / 100 text" % context_label)
+	_assert(cluster_rect.encloses(value_rect) and not bar_rect.intersection(value_rect).has_area(), "%s exact value remains visible, enclosed, and nonoverlapping bar=%s value=%s" % [context_label, bar_rect, value_rect])
+	var header_style := party_header.get_theme_stylebox(&"normal") as StyleBoxFlat
+	var expected_width := 2 if high_contrast else 1
+	_assert(int(state.get("track_outline_width", 0)) == expected_width, "%s track uses the required semantic outline width=%d" % [context_label, expected_width])
+	_assert(state.get("track_outline_color", Color.TRANSPARENT) == LivingForgeTokens.color(&"disabled", high_contrast), "%s track uses the muted non-focus outline token" % context_label)
+	_assert(header_style != null and _contrast_ratio(state.get("track_outline_color", Color.TRANSPARENT), header_style.bg_color) >= 3.0, "%s track outline separates measurably from the actual header surface" % context_label)
+	hud.free()
 	_cleanup_hud_fixture(fixture)
+	viewport.free()
+	_active_viewport = null
 
 
 func _exercise_level_up(viewport_size: Vector2i, ui_scale: int, text_scale: int) -> void:
@@ -279,9 +456,18 @@ func _exercise_level_up(viewport_size: Vector2i, ui_scale: int, text_scale: int)
 	_assert_contained(confirmation_body, confirmation.get_global_rect(), "%s confirmation body" % context_label)
 	_assert(not confirmation_body.is_ancestor_of(confirmation_actions), "%s confirmation actions stay pinned outside prose" % context_label)
 	_assert_target(confirm, "%s confirmation action" % context_label)
+	confirm.grab_focus()
+	await _wait_for_focus(confirm, "%s Level-up Confirm" % context_label)
+	_assert_focused_primary_action(confirm, panel.theme, &"LivingForgePrimaryButton", "%s Level-up Confirm" % context_label)
 	var confirmation_buttons := _direct_visible_controls(confirmation_actions, "Button")
 	_assert_control_set_geometry(confirmation_buttons, confirmation.get_global_rect(), "%s confirmation actions" % context_label)
 	_assert_controls_in_parent(_visible_buttons(panel), "%s all visible level-up actions" % context_label)
+	panel.show_choices([], party, {&"__empty__": "No eligible upgrades remain."})
+	var retry_offers := panel.get_node("Frame/Content/Offer/RetryOffers") as Button
+	await _wait_for_visible(retry_offers, "%s Retry Offers" % context_label)
+	retry_offers.grab_focus()
+	await _wait_for_focus(retry_offers, "%s Retry Offers" % context_label)
+	_assert_focused_primary_action(retry_offers, panel.theme, &"LivingForgePrimaryButton", "%s Retry Offers" % context_label)
 	panel.free()
 	viewport.free()
 	_active_viewport = null
@@ -305,6 +491,9 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 	var confirm := panel.get_node("Frame/Content/Actions/Confirm") as Button
 	await _wait_until(func() -> bool: return _extraction_cards(panel).size() == 24, "%s 24 eligible extraction cards" % context_label)
 	await _wait_for_stable_layout([frame, body, actions, confirm], context_label)
+	confirm.grab_focus()
+	await _wait_for_focus(confirm, "%s Confirm Extraction" % context_label)
+	_assert_focused_primary_action(confirm, panel.theme, &"LivingForgePrimaryButton", "%s Confirm Extraction" % context_label)
 	_assert_contained(frame, viewport_rect, "%s frame" % context_label)
 	_assert_contained(body, frame.get_global_rect(), "%s body" % context_label)
 	_assert(not body.is_ancestor_of(actions), "%s actions remain pinned outside item scrolling" % context_label)
@@ -385,16 +574,31 @@ func _exercise_extraction(viewport_size: Vector2i, ui_scale: int, text_scale: in
 		panel.show_unused_capacity_warning(2, 16, confirm)
 		var warning := panel.get_node("UnusedCapacityWarning") as Control
 		var warning_frame := panel.get_node("UnusedCapacityWarning/Frame") as Control
-		var back := panel.get_node("UnusedCapacityWarning/Frame/Actions/Back") as Button
-		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+		var warning_title := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Title") as Label
+		var warning_message := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Message") as Label
+		var warning_actions := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions") as HBoxContainer
+		var back := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Back") as Button
+		var acknowledge := panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 		await _wait_for_visible(warning, "%s unused-capacity warning" % context_label)
 		await _wait_for_focus(back, "%s warning Back" % context_label)
-		await _wait_for_stable_layout([warning_frame, back, acknowledge], "%s unused-capacity warning" % context_label)
+		await _wait_for_stable_layout([warning_frame, warning_title, warning_message, warning_actions, back, acknowledge], "%s unused-capacity warning" % context_label)
 		_assert(warning.visible and back.has_focus(), "%s unused-capacity warning uses safe Back default" % context_label)
 		_assert_contained(warning_frame, viewport_rect, "%s unused-capacity warning" % context_label)
+		_assert_controls_contained([warning_title, warning_message, warning_actions], warning_frame.get_global_rect(), "%s warning vertical flow" % context_label)
+		_assert_sibling_non_overlap([warning_title, warning_message, warning_actions], "%s warning vertical flow" % context_label)
+		_assert_control_set_geometry([back, acknowledge], warning_actions.get_global_rect(), "%s warning actions" % context_label)
+		var tallest_warning_button := maxf(back.get_global_rect().size.y, acknowledge.get_global_rect().size.y)
+		_assert(warning_actions.get_global_rect().size.y >= 48.0 and warning_actions.get_global_rect().size.y <= tallest_warning_button + 0.5, "%s warning Actions tracks its button row instead of the modal Frame; actions=%s tallest_button=%.2f frame=%s" % [context_label, warning_actions.get_global_rect(), tallest_warning_button, warning_frame.get_global_rect()])
+		_assert(warning_title.size.x + 0.5 >= warning_title.get_combined_minimum_size().x and warning_title.size.y + 0.5 >= warning_title.get_combined_minimum_size().y, "%s warning title remains readable without clipping; size=%s minimum=%s" % [context_label, warning_title.size, warning_title.get_combined_minimum_size()])
+		_assert(warning_message.size.x + 0.5 >= warning_message.get_combined_minimum_size().x and warning_message.size.y + 0.5 >= warning_message.get_combined_minimum_size().y and warning_message.get_visible_line_count() == warning_message.get_line_count(), "%s warning body remains readable without clipping; size=%s minimum=%s visible_lines=%d lines=%d" % [context_label, warning_message.size, warning_message.get_combined_minimum_size(), warning_message.get_visible_line_count(), warning_message.get_line_count()])
 		_assert_target(back, "%s warning Back" % context_label)
 		_assert_target(acknowledge, "%s warning Acknowledge" % context_label)
-		_assert_control_set_geometry([back, acknowledge], warning_frame.get_global_rect(), "%s warning actions" % context_label)
+		acknowledge.grab_focus()
+		await _wait_for_focus(acknowledge, "%s Accept Consequence" % context_label)
+		_assert(viewport.gui_get_focus_owner() == acknowledge, "%s Accept Consequence remains the actual viewport focus owner when requested" % context_label)
+		_assert_focused_primary_action(acknowledge, panel.theme, &"LivingForgePrimaryButton", "%s Accept Consequence" % context_label)
+		back.grab_focus()
+		await _wait_for_focus(back, "%s warning Back before close" % context_label)
 		back.pressed.emit()
 		await _wait_for_hidden(warning, "%s unused-capacity warning" % context_label)
 		await _wait_for_focus(confirm, "%s warning return Confirm" % context_label)
@@ -498,6 +702,31 @@ func _exercise_result(viewport_size: Vector2i, ui_scale: int, text_scale: int, h
 		_assert(final_row.has_focus(), "%s focus bridge returns to the final recap row" % context_label)
 		if _long_detail_corner(viewport_size, ui_scale, text_scale):
 			await _exercise_long_recap_detail(final_row, body, footer, frame, panel.theme, context_label)
+	var view_model := RunResultViewModel.new()
+	var retry_build := view_model.resolution_interrupted(fixture.snapshot, "Resolution was interrupted.", null)
+	_assert(retry_build.ok(), "%s retry focus fixture builds" % context_label)
+	if retry_build.ok():
+		panel.present(retry_build.projection.with_visual_settings(result_settings))
+		var retry := panel.get_node("Frame/Content/Footer/Actions/RetryResolution") as Button
+		await _wait_for_visible(retry, "%s Result Retry" % context_label)
+		retry.grab_focus()
+		await _wait_for_focus(retry, "%s Result Retry" % context_label)
+		_assert_focused_primary_action(retry, panel.theme, &"LivingForgePrimaryButton", "%s Result Retry" % context_label)
+	var automatic_evaluation := RunResolutionEvaluation.create(fixture.resolution.accepted_extraction, 2, 0, 0, "automatic-only blocked", RunResolutionEvaluation.FailureCategory.STASH_AUTOMATIC_ONLY, "Automatic retained items need more destination space.")
+	var preflight := RunResolutionPreflightResult.from_evaluation(automatic_evaluation)
+	var guarded_build := view_model.resolution_interrupted(fixture.snapshot, preflight.player_reason, _durable_safety(fixture.snapshot), preflight)
+	_assert(guarded_build.ok(), "%s Result Confirm focus fixture builds" % context_label)
+	if guarded_build.ok():
+		panel.present(guarded_build.projection.with_visual_settings(result_settings))
+		var protect := panel.get_node("Frame/Content/Footer/Actions/ProtectDisplacedGear") as Button
+		await _wait_for_visible(protect, "%s Protect Displaced Gear" % context_label)
+		protect.pressed.emit()
+		var result_confirmation := panel.get_node("Frame/Content/Confirmation") as Control
+		var result_confirm := panel.get_node("Frame/Content/Confirmation/Content/Actions/Confirm") as Button
+		await _wait_for_visible(result_confirmation, "%s Result Confirm modal" % context_label)
+		result_confirm.grab_focus()
+		await _wait_for_focus(result_confirm, "%s Result Confirm" % context_label)
+		_assert_focused_primary_action(result_confirm, panel.theme, &"LivingForgePrimaryButton", "%s Result Confirm" % context_label)
 	panel.free()
 	viewport.free()
 	_active_viewport = null
@@ -552,6 +781,53 @@ func _settings(ui_scale: int, text_scale: int) -> PartyForgeSettings:
 	result.ui_scale_percent = ui_scale
 	result.text_scale_percent = text_scale
 	return result
+
+
+func _contrast_ratio(first: Color, second: Color) -> float:
+	var first_luminance := _relative_luminance(first)
+	var second_luminance := _relative_luminance(second)
+	return (maxf(first_luminance, second_luminance) + 0.05) / (minf(first_luminance, second_luminance) + 0.05)
+
+
+func _relative_luminance(value: Color) -> float:
+	return 0.2126 * _linear_channel(value.r) + 0.7152 * _linear_channel(value.g) + 0.0722 * _linear_channel(value.b)
+
+
+func _linear_channel(value: float) -> float:
+	return value / 12.92 if value <= 0.04045 else pow((value + 0.055) / 1.055, 2.4)
+
+
+func _durable_safety(snapshot: RunTerminalSnapshot) -> RunTerminalRecoverySafetyResult:
+	var empty: Array[String] = []
+	var displaced: Array[String] = []
+	var record_result := RunTerminalRecoveryRecord.create(RunTerminalRecoveryRecord.Stage.CHOOSING_EXTRACTION, snapshot, empty, "", displaced, "", null, "")
+	return RunTerminalRecoverySafetyResult.success(record_result.record) if record_result.ok() else RunTerminalRecoverySafetyResult.failure(record_result.error)
+
+
+func _exercise_primary_action_bar() -> void:
+	var viewport := _new_viewport(Vector2i(1280, 720))
+	var bar := (load("res://scenes/ui/living_forge/components/forge_action_bar.tscn") as PackedScene).instantiate() as ForgeActionBar
+	viewport.add_child(bar)
+	bar.theme = LivingForgeThemeCatalog.resolve(false, 100, 100)
+	bar.present([{"id": &"start", "label": "Start Run", "enabled": true, "kind": &"primary", "accessibility_description": "Start the selected run."}])
+	var primary := bar.button_for(&"start") as Button
+	await _wait_for_stable_layout([bar, primary], "ForgeActionBar primary")
+	primary.grab_focus()
+	await _wait_for_focus(primary, "ForgeActionBar primary")
+	_assert_focused_primary_action(primary, bar.theme, &"LivingForgePrimaryButton", "ForgeActionBar primary")
+	bar.free()
+	viewport.free()
+	_active_viewport = null
+
+
+func _assert_focused_primary_action(button: Button, theme: Theme, variation: StringName, label: String) -> void:
+	_assert(_active_viewport != null and _active_viewport.gui_get_focus_owner() == button, "%s owns actual viewport focus before focus-style inspection" % label)
+	_assert(button.is_visible_in_tree() and not button.disabled and button.focus_mode != Control.FOCUS_NONE, "%s is visible and eligible while focused" % label)
+	_assert(button.theme_type_variation == variation, "%s uses the shared %s variation" % [label, variation])
+	_assert(not button.has_theme_stylebox_override(&"focus"), "%s has no local focus StyleBox override" % label)
+	_assert(not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus font override" % label)
+	_assert(button.get_theme_stylebox(&"focus", variation) == theme.get_stylebox(&"focus", variation), "%s resolves the shared focus StyleBox" % label)
+	_assert(button.get_theme_color(&"font_focus_color", variation) == theme.get_color(&"font_focus_color", variation), "%s resolves the shared focus foreground" % label)
 
 
 func _extraction_projection(count: int, capacity: int, automatic_count: int) -> TerminalExtractionProjection:
@@ -758,6 +1034,10 @@ func _assert_expanded_result_detail_geometry(row: Button, primary: Control, deta
 	_assert(primary_rect.end.y <= detail_rect.position.y, "%s Primary ends above Detail: primary=%s detail=%s" % [context_label, primary_rect, detail_rect])
 	_assert(primary.size.x + 0.5 >= primary.get_combined_minimum_size().x and primary.size.y + 0.5 >= primary.get_combined_minimum_size().y, "%s Primary remains readable: size=%s minimum=%s" % [context_label, primary.size, primary.get_combined_minimum_size()])
 	_assert(detail.size.x + 0.5 >= detail.get_combined_minimum_size().x and detail.size.y + 0.5 >= detail.get_combined_minimum_size().y, "%s Detail remains readable: size=%s minimum=%s" % [context_label, detail.size, detail.get_combined_minimum_size()])
+
+
+func _visual_global_rect(visual: Control, local_rect: Rect2) -> Rect2:
+	return Rect2(visual.global_position + local_rect.position, local_rect.size)
 
 
 func _assert_contained(control: Control, outer: Rect2, label: String) -> void:

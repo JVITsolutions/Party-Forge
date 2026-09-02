@@ -136,7 +136,7 @@ func _exercise_real_panel_flow(packed: PackedScene, item_type: Script, projectio
 	_assert(_confirms == 1, "pending duplicate confirmation input is blocked")
 	_panel.call(&"set_pending", false)
 	_panel.call(&"show_unused_capacity_warning", 1, 1, first)
-	var acknowledge := _panel.get_node("UnusedCapacityWarning/Frame/Actions/Acknowledge") as Button
+	var acknowledge := _panel.get_node("UnusedCapacityWarning/Frame/Padding/Layout/Actions/Acknowledge") as Button
 	acknowledge.grab_focus()
 	await _press_key(KEY_ENTER)
 	_assert(_acks == 1 and first.has_focus(), "second acknowledgement emits and restores exact item focus")

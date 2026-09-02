@@ -49,6 +49,12 @@ func _test_preview_focus_and_start_treatment(panel: Variant, failures: Array[Str
 	var focus_style := panel.theme.get_stylebox(&"focus", &"LivingForgeStartButton") as StyleBoxFlat
 	TestAssertions.truthy(focus_style != null and focus_style.draw_center and focus_style.border_width_left >= 3, "Start Run focus owns a filled background and strong ring", failures)
 	TestAssertions.truthy(panel.theme.has_color(&"font_focus_color", &"LivingForgeStartButton"), "Start Run focus owns an explicit foreground", failures)
+	_assert_shared_primary_action(start, "Start Run", failures)
+
+
+func _assert_shared_primary_action(button: Button, label: String, failures: Array[String]) -> void:
+	TestAssertions.truthy(not button.has_theme_stylebox_override(&"focus"), "%s has no local focus StyleBox override" % label, failures)
+	TestAssertions.truthy(not button.has_theme_color_override(&"font_focus_color"), "%s has no local focus font override" % label, failures)
 
 
 func _test_scene_and_public_seam(failures: Array[String]) -> void:

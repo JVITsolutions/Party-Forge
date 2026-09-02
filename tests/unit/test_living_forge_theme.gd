@@ -93,6 +93,7 @@ func run() -> Array[String]:
 	_assert_tokens(failures)
 	_assert_theme_contracts(failures)
 	_assert_focus_stylebox_contrast(failures)
+	_assert_primary_action_focus_parity(failures)
 	_assert_high_contrast_interaction_states(failures)
 	_assert_hover_pressed_contract(failures)
 	_assert_component_typography_contracts(failures)
@@ -229,8 +230,6 @@ func _assert_focus_stylebox_contrast(failures: Array[String]) -> void:
 		var theme := load(path) as Theme
 		if theme == null:
 			continue
-		var forged := theme.get_color(&"surface_forged", &"LivingForgeSemantic")
-		var inset := theme.get_color(&"surface_inset", &"LivingForgeSemantic")
 		var semantic_focus := theme.get_color(&"focus_outline", &"LivingForgeSemantic")
 		for variation: StringName in state_names:
 			var focus := theme.get_stylebox(&"focus", variation) as StyleBoxFlat
@@ -238,15 +237,17 @@ func _assert_focus_stylebox_contrast(failures: Array[String]) -> void:
 			if focus == null:
 				continue
 			if variation == &"LivingForgePrimaryButton":
-				TestAssertions.truthy(not focus.is_draw_center_enabled(), "%s Primary focus is outline-only and does not fill the shadow interior" % path, failures)
-				TestAssertions.equal(focus.shadow_color, semantic_focus, "%s Primary uses the semantic bright outer focus outline" % path, failures)
-				TestAssertions.truthy(focus.shadow_color.a >= 1.0, "%s Primary outer focus outline is opaque" % path, failures)
-				TestAssertions.truthy(focus.shadow_size >= 2, "%s Primary outer focus outline has visible expanded thickness" % path, failures)
-				TestAssertions.equal(focus.shadow_offset, Vector2.ZERO, "%s Primary outer focus outline is centered on the control" % path, failures)
-				TestAssertions.truthy(_contrast_ratio(focus.border_color, focus.shadow_color) >= 3.0, "%s Primary inner and outer focus outlines remain visually distinct" % path, failures)
-				for surrounding: Color in [forged, inset]:
-					var outer_ratio := _contrast_ratio(focus.shadow_color, surrounding)
-					TestAssertions.truthy(outer_ratio >= 3.0, "%s Primary outer focus outline contrasts with surrounding forged/inset surface at >=3:1 (actual %.3f)" % [path, outer_ratio], failures)
+				var expected_ring_width := 5 if path == HIGH_CONTRAST_THEME_PATH else 4
+				TestAssertions.truthy(focus.is_draw_center_enabled(), "%s Primary focus owns a filled center" % path, failures)
+				TestAssertions.equal(focus.bg_color, theme.get_color(&"surface_inset", &"LivingForgeSemantic"), "%s Primary uses semantic inset focus fill" % path, failures)
+				TestAssertions.equal(focus.border_color, semantic_focus, "%s Primary uses semantic focus ring" % path, failures)
+				TestAssertions.equal(_style_border_widths(focus), [expected_ring_width, expected_ring_width, expected_ring_width, expected_ring_width], "%s Primary preserves the canonical focus ring width" % path, failures)
+				TestAssertions.truthy(theme.has_color(&"font_focus_color", variation), "%s Primary owns explicit focus text color" % path, failures)
+				var focus_font := theme.get_color(&"font_focus_color", variation)
+				TestAssertions.equal(focus_font, theme.get_color(&"ember_primary", &"LivingForgeSemantic"), "%s Primary uses semantic ember focus text" % path, failures)
+				TestAssertions.truthy(_contrast_ratio(focus_font, focus.bg_color) >= 4.5, "%s Primary focused text contrast is >=4.5:1" % path, failures)
+				TestAssertions.truthy(_contrast_ratio(focus.border_color, focus.bg_color) >= 3.0, "%s Primary focus ring contrasts with its inset fill at >=3:1" % path, failures)
+				continue
 			for state: StringName in state_names[variation]:
 				var surface := theme.get_stylebox(state, variation) as StyleBoxFlat
 				TestAssertions.truthy(surface != null, "%s %s exposes %s StyleBoxFlat" % [path, variation, state], failures)
@@ -254,6 +255,64 @@ func _assert_focus_stylebox_contrast(failures: Array[String]) -> void:
 					continue
 				var ratio := _contrast_ratio(focus.border_color, surface.bg_color)
 				TestAssertions.truthy(ratio >= 3.0, "%s %s focus boundary contrasts with %s surface at >=3:1 (actual %.3f)" % [path, variation, state, ratio], failures)
+
+
+func _assert_primary_action_focus_parity(failures: Array[String]) -> void:
+	if not ResourceLoader.exists(CATALOG_PATH):
+		return
+	var catalog := load(CATALOG_PATH) as Script
+	for high_contrast: bool in [false, true]:
+		for ui_percent: int in [80, 90, 100, 110, 125, 150]:
+			for text_percent: int in [100, 150]:
+				var theme := catalog.call(&"resolve", high_contrast, ui_percent, text_percent) as Theme
+				var label := "high_contrast=%s ui=%d text=%d" % [high_contrast, ui_percent, text_percent]
+				TestAssertions.truthy(theme != null, "primary-action theme resolves for %s" % label, failures)
+				if theme == null:
+					continue
+				for variation: StringName in [&"LivingForgePrimaryButton", &"LivingForgeStartButton"]:
+					var focus := theme.get_stylebox(&"focus", variation) as StyleBoxFlat
+					TestAssertions.truthy(focus != null and focus.is_draw_center_enabled(), "%s focus owns a filled center for %s" % [variation, label], failures)
+					TestAssertions.truthy(theme.has_color(&"font_focus_color", variation), "%s owns explicit focus text color for %s" % [variation, label], failures)
+					if focus == null:
+						continue
+					var focus_font := theme.get_color(&"font_focus_color", variation)
+					var ratio := _contrast_ratio(focus_font, focus.bg_color)
+					TestAssertions.truthy(ratio >= 4.5, "%s focused text contrast is >=4.5:1 for %s (actual %.3f)" % [variation, label, ratio], failures)
+					TestAssertions.equal(focus.bg_color, theme.get_color(&"surface_inset", &"LivingForgeSemantic"), "%s uses semantic inset focus fill for %s" % [variation, label], failures)
+					TestAssertions.equal(focus.border_color, theme.get_color(&"focus_outline", &"LivingForgeSemantic"), "%s uses semantic focus ring for %s" % [variation, label], failures)
+				for slot: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus"]:
+					var primary_style := theme.get_stylebox(slot, &"LivingForgePrimaryButton") as StyleBoxFlat
+					var start_style := theme.get_stylebox(slot, &"LivingForgeStartButton") as StyleBoxFlat
+					TestAssertions.truthy(primary_style != null and start_style != null, "Primary and Start resolve %s StyleBoxFlat for %s" % [slot, label], failures)
+					TestAssertions.truthy(primary_style != null and start_style != null and primary_style != start_style, "Primary and Start own distinct %s StyleBox instances for %s" % [slot, label], failures)
+					if primary_style != null and start_style != null:
+						TestAssertions.equal(_primary_action_style_signature(start_style), _primary_action_style_signature(primary_style), "Primary and Start share the same %s geometry/color signature for %s" % [slot, label], failures)
+				for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_hover_pressed_color", &"font_focus_color"]:
+					TestAssertions.equal(theme.get_color(color_name, &"LivingForgeStartButton"), theme.get_color(color_name, &"LivingForgePrimaryButton"), "Primary and Start share %s for %s" % [color_name, label], failures)
+				_assert_start_hover_pressed_scaling(theme, high_contrast, ui_percent, label, failures)
+
+
+func _primary_action_style_signature(style: StyleBoxFlat) -> Array:
+	return [
+		style.draw_center, style.bg_color, style.border_color,
+		style.content_margin_left, style.content_margin_top, style.content_margin_right, style.content_margin_bottom,
+		style.border_width_left, style.border_width_top, style.border_width_right, style.border_width_bottom,
+		style.corner_radius_top_left, style.corner_radius_top_right, style.corner_radius_bottom_right, style.corner_radius_bottom_left,
+		style.shadow_color, style.shadow_size, style.shadow_offset,
+	]
+
+
+func _assert_start_hover_pressed_scaling(theme: Theme, high_contrast: bool, ui_percent: int, label: String, failures: Array[String]) -> void:
+	var path := HIGH_CONTRAST_THEME_PATH if high_contrast else NORMAL_THEME_PATH
+	var canonical := load(path) as Theme
+	var canonical_style := canonical.get_stylebox(&"hover_pressed", &"LivingForgePrimaryButton") as StyleBoxFlat if canonical != null else null
+	var start_style := theme.get_stylebox(&"hover_pressed", &"LivingForgeStartButton") as StyleBoxFlat
+	if canonical_style == null or start_style == null:
+		return
+	for property: StringName in _style_geometry_properties():
+		var base_value := float(canonical_style.get(property))
+		var expected := 0 if is_zero_approx(base_value) else maxi(roundi(base_value * float(ui_percent) / 100.0), 1)
+		TestAssertions.equal(int(start_style.get(property)), expected, "Start hover_pressed scales %s at %s rather than retaining 100%% geometry" % [property, label], failures)
 
 
 func _assert_high_contrast_interaction_states(failures: Array[String]) -> void:
@@ -440,7 +499,7 @@ func _assert_exact_scale_corner_matrix(catalog: Script, failures: Array[String])
 			var expected_font_size := maxi(roundi(float(canonical_font_size) * float(scale_row.y) / 100.0), 1)
 			TestAssertions.equal(variant.default_font_size, expected_font_size, "text scale changes typography exactly for %s" % label, failures)
 			TestAssertions.truthy(variant.get_constant(&"action_minimum", &"LivingForgeMetrics") >= 48, "exact scale corner retains 48px action target for %s" % label, failures)
-			for variation: StringName in [&"LivingForgePrimaryButton", &"LivingForgeSecondaryButton", &"LivingForgeDestructiveButton"]:
+			for variation: StringName in [&"LivingForgePrimaryButton", &"LivingForgeStartButton", &"LivingForgeSecondaryButton", &"LivingForgeDestructiveButton"]:
 				TestAssertions.truthy(variant.get_stylebox(&"focus", variation) is StyleBoxFlat, "%s retains visible focus style for %s" % [label, variation], failures)
 		TestAssertions.equal(_geometry_constant_snapshot(canonical), canonical_constants, "scale matrix preserves canonical geometry for high_contrast=%s" % high_contrast, failures)
 		TestAssertions.equal(_style_geometry_snapshot(canonical), canonical_styles, "scale matrix preserves canonical StyleBox geometry for high_contrast=%s" % high_contrast, failures)

@@ -3,10 +3,24 @@ extends CanvasLayer
 
 signal inspect_requested(member_id: int, return_focus: Control)
 signal ledger_requested(member_id: int, return_focus: Control)
+signal collapse_preferences_changed(party_collapsed: bool, alerts_collapsed: bool)
 
 const RICH_MEMBER_SCENE := preload("res://scenes/ui/living_forge/components/forge_party_member_card.tscn")
 const COMPACT_MEMBER_SCENE := preload("res://scenes/ui/living_forge/components/forge_party_member_marker.tscn")
 const ALERT_CARD_SCENE := preload("res://scenes/ui/living_forge/components/forge_alert_card.tscn")
+const CRITICAL_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/tabler-3.46.0/alert-triangle.svg")
+const DOWNED_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/downed.svg")
+const DEAD_STATE_ICON: Texture2D = preload("res://assets/ui/living_forge/icons/party-forge/dead.svg")
+const REGION_PARTY: StringName = &"party"
+const REGION_ALERTS: StringName = &"alerts"
+const HEADER_VISUAL_PADDING := 8.0
+const HEADER_VISUAL_GAP := 4.0
+const HEADER_DISCLOSURE_SIZE := 20.0
+const HEADER_STATE_CUE_SIZE := 24.0
+const HEADER_HEALTH_WIDTH := 132.0
+const HEADER_HEALTH_MIN_WIDTH := 96.0
+const HEADER_HEALTH_BAR_HEIGHT := 12.0
+const ALERT_REGION_BASE_WIDTH := 472.0
 
 var game_run: Node
 var party_manager: PartyManager
@@ -41,7 +55,18 @@ var _deferred_focus_descriptor: Dictionary = {}
 var _terminal_suspended_focus_modes: Array[Dictionary] = []
 var _terminal_prior_focus: Control
 var _terminal_prior_focus_descriptor: Dictionary = {}
-var _alert_budget_reflow_queued := false
+var _party_collapsed := false
+var _alerts_collapsed := false
+var _collapsed_focus_descriptors := {REGION_PARTY: {}, REGION_ALERTS: {}}
+var _collapsed_focus_modes := {REGION_PARTY: [], REGION_ALERTS: []}
+var _disclosure_tweens: Dictionary = {}
+var _disclosure_presented_states: Dictionary = {}
+var _disclosure_rotations := {REGION_PARTY: PI / 2.0, REGION_ALERTS: PI / 2.0}
+var _header_visual_states := {
+	REGION_PARTY: {"summary": "PARTY", "available": false, "severity": CombatHudProjection.NO_ALERT_SEVERITY, "state_icon": null, "all_clear_visible": false, "state_color": Color.WHITE, "health_visible": false},
+	REGION_ALERTS: {"summary": "ALERTS · ALL CLEAR", "available": false, "severity": CombatHudProjection.NO_ALERT_SEVERITY, "state_icon": null, "all_clear_visible": false, "state_color": Color.WHITE, "health_visible": false},
+}
+var _semantic_header_icon_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -77,24 +102,42 @@ func _suspend_non_terminal_focus(panel: TerminalExtractionPanel) -> void:
 		var control := node as Control
 		if control == null or control == panel or panel.is_ancestor_of(control):
 			continue
-		if control.focus_mode == Control.FOCUS_NONE:
+		if control.focus_mode == Control.FOCUS_NONE or not _terminal_control_is_presentationally_available(control):
 			continue
-		_terminal_suspended_focus_modes.append({"control": control, "focus_mode": control.focus_mode})
+		_terminal_suspended_focus_modes.append({
+			"control": control,
+			"focus_mode": control.focus_mode,
+			"presentation_focus_mode": control.focus_mode,
+		})
 		control.focus_mode = Control.FOCUS_NONE
 
 
 func _restore_non_terminal_focus() -> void:
 	for entry: Dictionary in _terminal_suspended_focus_modes:
-		var control := entry.get("control") as Control
-		if control != null and is_instance_valid(control):
-			control.focus_mode = int(entry.get("focus_mode", Control.FOCUS_NONE))
+		var raw_control: Variant = entry.get("control")
+		if is_instance_valid(raw_control):
+			var control := raw_control as Control
+			if control == null:
+				continue
+			var presentation_mode := int(entry.get("presentation_focus_mode", entry.get("focus_mode", Control.FOCUS_NONE)))
+			control.focus_mode = presentation_mode if _terminal_control_is_focus_eligible(control, presentation_mode) else Control.FOCUS_NONE
 	_terminal_suspended_focus_modes.clear()
-	var direct := _terminal_prior_focus
+	var direct_value: Variant = _terminal_prior_focus
 	var descriptor := _terminal_prior_focus_descriptor.duplicate(true)
 	_terminal_prior_focus = null
 	_terminal_prior_focus_descriptor.clear()
-	var direct_disabled := direct is BaseButton and (direct as BaseButton).disabled
-	if direct != null and is_instance_valid(direct) and direct.is_visible_in_tree() and direct.focus_mode != Control.FOCUS_NONE and not direct_disabled:
+	for region: StringName in [REGION_PARTY, REGION_ALERTS]:
+		if _region_collapsed(region):
+			_restore_region_focus_modes(region)
+			_suspend_region_focus(region)
+		else:
+			_restore_region_focus_modes(region)
+	var direct: Control
+	if is_instance_valid(direct_value):
+		direct = direct_value as Control
+	var direct_valid := direct != null and is_instance_valid(direct)
+	var direct_disabled := direct_valid and direct is BaseButton and (direct as BaseButton).disabled
+	if direct_valid and direct.is_visible_in_tree() and direct.focus_mode != Control.FOCUS_NONE and not direct_disabled:
 		direct.grab_focus()
 		return
 	if not descriptor.is_empty():
@@ -102,12 +145,27 @@ func _restore_non_terminal_focus() -> void:
 
 
 func _ensure_control_connections() -> void:
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
 	var previous := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Button
 	var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	for visual_entry: Dictionary in [
+		{"region": REGION_PARTY, "visual": get_node("Margin/CombatStatus/PartyHeader/Visual") as Control},
+		{"region": REGION_ALERTS, "visual": get_node("Margin/CombatStatus/AlertRegion/Header/Visual") as Control},
+	]:
+		var visual := visual_entry["visual"] as Control
+		if not visual.has_meta(&"header_draw_connected"):
+			visual.draw.connect(_draw_region_header_visual.bind(visual_entry["region"], visual))
+			visual.resized.connect(visual.queue_redraw)
+			visual.set_meta(&"header_draw_connected", true)
+	if not party_header.pressed.is_connected(_on_party_header_pressed): party_header.pressed.connect(_on_party_header_pressed)
+	if not alerts_header.pressed.is_connected(_on_alerts_header_pressed): alerts_header.pressed.connect(_on_alerts_header_pressed)
 	if not previous.pressed.is_connected(_on_previous_page): previous.pressed.connect(_on_previous_page)
 	if not next.pressed.is_connected(_on_next_page): next.pressed.connect(_on_next_page)
 	if not overflow.pressed.is_connected(_on_overflow_pressed): overflow.pressed.connect(_on_overflow_pressed)
+	if not tray_action.pressed.is_connected(_on_alerts_tray_action_pressed): tray_action.pressed.connect(_on_alerts_tray_action_pressed)
 	var tray := get_node("CombatAlertTray") as CombatAlertTray
 	if not tray.inspect_requested.is_connected(_on_inspect_route): tray.inspect_requested.connect(_on_inspect_route)
 	if not tray.ledger_requested.is_connected(_on_ledger_route): tray.ledger_requested.connect(_on_ledger_route)
@@ -115,6 +173,8 @@ func _ensure_control_connections() -> void:
 	if not tray.closed.is_connected(_on_modal_closed): tray.closed.connect(_on_modal_closed)
 	var inspector := get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel
 	if not inspector.closed.is_connected(_on_modal_closed): inspector.closed.connect(_on_modal_closed)
+	var viewport := _hud_viewport()
+	if not viewport.gui_focus_changed.is_connected(_on_hud_focus_changed): viewport.gui_focus_changed.connect(_on_hud_focus_changed)
 
 
 func configure(run: Node, party: PartyManager, experience: ExperienceSystem, context: PlayerRunContext, saved_settings: PartyForgeSettings) -> void:
@@ -127,6 +187,7 @@ func configure(run: Node, party: PartyManager, experience: ExperienceSystem, con
 	run_context = context
 	settings = saved_settings if saved_settings != null else PartyForgeSettings.new()
 	_apply_visual_settings_to_surfaces()
+	apply_collapse_preferences(settings.hud_party_collapsed, settings.hud_alerts_collapsed)
 	if party_manager != null:
 		party_manager.member_added.connect(_on_party_structure_changed)
 		party_manager.class_rank_changed.connect(_on_party_value_changed)
@@ -147,6 +208,7 @@ func configure(run: Node, party: PartyManager, experience: ExperienceSystem, con
 func apply_visual_settings(saved_settings: PartyForgeSettings) -> void:
 	settings = saved_settings if saved_settings != null else PartyForgeSettings.new()
 	_apply_visual_settings_to_surfaces()
+	apply_collapse_preferences(settings.hud_party_collapsed, settings.hud_alerts_collapsed)
 	if current_projection != null:
 		_refresh_projection(true)
 
@@ -163,6 +225,644 @@ func _apply_visual_settings_to_surfaces() -> void:
 	shell.theme = resolved_theme
 	(get_node("CombatAlertTray") as CombatAlertTray).apply_visual_settings(resolved_theme, _high_contrast)
 	(get_node("CombatMemberInspectPanel") as CombatMemberInspectPanel).apply_visual_settings(resolved_theme)
+
+
+func party_collapsed() -> bool:
+	return _party_collapsed
+
+
+func alerts_collapsed() -> bool:
+	return _alerts_collapsed
+
+
+func apply_collapse_preferences(party_value: bool, alerts_value: bool) -> void:
+	_set_party_collapsed(party_value, false)
+	_set_alerts_collapsed(alerts_value, false)
+	_present_region_headers()
+
+
+func _set_party_collapsed(value: bool, user_initiated: bool) -> void:
+	if _party_collapsed == value:
+		return
+	if value:
+		_prepare_region_collapse(REGION_PARTY, user_initiated)
+	_party_collapsed = value
+	for path: NodePath in [^"Margin/CombatStatus/LeaderCard", ^"Margin/CombatStatus/Experience", ^"Margin/CombatStatus/PartyRegion"]:
+		(get_node(path) as Control).visible = not value
+	_present_region_headers()
+	if current_projection != null:
+		_refresh_projection(true)
+	if not value:
+		_finish_region_expand(REGION_PARTY, user_initiated)
+	if user_initiated:
+		collapse_preferences_changed.emit(_party_collapsed, _alerts_collapsed)
+
+
+func _set_alerts_collapsed(value: bool, user_initiated: bool) -> void:
+	if _alerts_collapsed == value:
+		return
+	if value:
+		_prepare_region_collapse(REGION_ALERTS, user_initiated)
+	_alerts_collapsed = value
+	var expanded := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as BaseButton
+	expanded.visible = not value
+	if value:
+		overflow.visible = false
+		overflow.disabled = true
+		_set_presentation_focus_mode(overflow, Control.FOCUS_NONE)
+	_present_region_headers()
+	if not value and current_projection != null:
+		_apply_alert_budget()
+	else:
+		_reflow_alert_rows(false)
+	if not value:
+		_finish_region_expand(REGION_ALERTS, user_initiated)
+	if user_initiated:
+		collapse_preferences_changed.emit(_party_collapsed, _alerts_collapsed)
+
+
+func _region_content_roots(region: StringName) -> Array[Control]:
+	if region == REGION_PARTY:
+		return [
+			get_node("Margin/CombatStatus/LeaderCard") as Control,
+			get_node("Margin/CombatStatus/Experience") as Control,
+			get_node("Margin/CombatStatus/PartyRegion") as Control,
+		]
+	return [
+		get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control,
+		get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control,
+	]
+
+
+func _region_header(region: StringName) -> Button:
+	if region == REGION_PARTY:
+		return get_node("Margin/CombatStatus/PartyHeader") as Button
+	return get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+
+
+func _region_collapsed(region: StringName) -> bool:
+	return _party_collapsed if region == REGION_PARTY else _alerts_collapsed
+
+
+func _region_contains_control(region: StringName, control: Control) -> bool:
+	if control == null or not is_instance_valid(control):
+		return false
+	for root: Control in _region_content_roots(region):
+		if control == root or root.is_ancestor_of(control):
+			return true
+	return false
+
+
+func _on_hud_focus_changed(control: Control) -> void:
+	if control == null or not is_instance_valid(control):
+		return
+	for region: StringName in [REGION_PARTY, REGION_ALERTS]:
+		if _region_collapsed(region) or not _region_contains_control(region, control):
+			continue
+		var descriptor := focus_descriptor_for(control)
+		if not descriptor.is_empty():
+			_collapsed_focus_descriptors[region] = descriptor.duplicate(true)
+
+
+func _suspend_region_focus(region: StringName) -> void:
+	var existing := _collapsed_focus_modes.get(region, []) as Array
+	if not existing.is_empty():
+		return
+	var entries: Array = []
+	for root: Control in _region_content_roots(region):
+		var controls: Array[Control] = [root]
+		for node: Node in root.find_children("*", "Control", true, false):
+			if node is Control:
+				controls.append(node as Control)
+		for control: Control in controls:
+			var focus_mode := control.focus_mode
+			if _terminal_control_is_presentationally_available(control):
+				var terminal_focus_mode := _claim_terminal_presentation_focus_mode(control)
+				if terminal_focus_mode != Control.FOCUS_NONE:
+					focus_mode = terminal_focus_mode
+			if focus_mode != Control.FOCUS_NONE:
+				entries.append({"control": control, "focus_mode": focus_mode})
+				control.focus_mode = Control.FOCUS_NONE
+	_collapsed_focus_modes[region] = entries
+
+
+func _restore_region_focus_modes(region: StringName) -> void:
+	for entry: Dictionary in _collapsed_focus_modes.get(region, []) as Array:
+		var raw_control: Variant = entry.get("control")
+		if is_instance_valid(raw_control):
+			var control := raw_control as Control
+			if control == null:
+				continue
+			control.focus_mode = int(entry.get("focus_mode", Control.FOCUS_NONE))
+	_collapsed_focus_modes[region] = []
+
+
+func _reconcile_terminal_focus_suspension() -> void:
+	var panel := get_node("TerminalExtraction") as TerminalExtractionPanel
+	if not panel.visible and _terminal_suspended_focus_modes.is_empty():
+		return
+	var reconciled: Array[Dictionary] = []
+	var seen: Dictionary = {}
+	for entry: Dictionary in _terminal_suspended_focus_modes:
+		var raw_control: Variant = entry.get("control")
+		if not is_instance_valid(raw_control):
+			continue
+		var control := raw_control as Control
+		if control == null or control == panel or panel.is_ancestor_of(control):
+			continue
+		var instance_id := control.get_instance_id()
+		if seen.has(instance_id):
+			continue
+		seen[instance_id] = true
+		var original_mode := int(entry.get("focus_mode", Control.FOCUS_NONE))
+		var presentation_mode := int(entry.get("presentation_focus_mode", original_mode))
+		if control.focus_mode != Control.FOCUS_NONE:
+			presentation_mode = control.focus_mode
+		if not _terminal_control_is_presentationally_available(control):
+			presentation_mode = Control.FOCUS_NONE
+		if _set_region_suspended_focus_mode(control, presentation_mode):
+			continue
+		reconciled.append({
+			"control": control,
+			"focus_mode": original_mode,
+			"presentation_focus_mode": presentation_mode,
+		})
+	for node: Node in find_children("*", "Control", true, false):
+		var control := node as Control
+		if (
+			control == null
+			or control == panel
+			or panel.is_ancestor_of(control)
+			or control.focus_mode == Control.FOCUS_NONE
+			or not _terminal_control_is_presentationally_available(control)
+		):
+			continue
+		if _set_region_suspended_focus_mode(control, control.focus_mode):
+			continue
+		var instance_id := control.get_instance_id()
+		if not seen.has(instance_id):
+			seen[instance_id] = true
+			reconciled.append({
+				"control": control,
+				"focus_mode": control.focus_mode,
+				"presentation_focus_mode": control.focus_mode,
+			})
+		control.focus_mode = Control.FOCUS_NONE
+	_terminal_suspended_focus_modes = reconciled
+
+
+func _set_presentation_focus_mode(control: Control, focus_mode: Control.FocusMode) -> void:
+	if control == null or not is_instance_valid(control):
+		return
+	for entry: Dictionary in _terminal_suspended_focus_modes:
+		var raw_control: Variant = entry.get("control")
+		if not is_instance_valid(raw_control):
+			continue
+		var suspended_control := raw_control as Control
+		if suspended_control == control:
+			entry["presentation_focus_mode"] = focus_mode
+			control.focus_mode = Control.FOCUS_NONE
+			return
+	if _set_region_suspended_focus_mode(control, focus_mode):
+		return
+	if _terminal_focus_suspension_active():
+		if focus_mode != Control.FOCUS_NONE and _terminal_control_is_presentationally_available(control):
+			_terminal_suspended_focus_modes.append({
+				"control": control,
+				"focus_mode": focus_mode,
+				"presentation_focus_mode": focus_mode,
+			})
+		control.focus_mode = Control.FOCUS_NONE
+		return
+	control.focus_mode = focus_mode
+
+
+func _set_region_suspended_focus_mode(control: Control, focus_mode: int) -> bool:
+	for region: StringName in [REGION_PARTY, REGION_ALERTS]:
+		var entries := _collapsed_focus_modes.get(region, []) as Array
+		for index: int in range(entries.size() - 1, -1, -1):
+			var entry := entries[index] as Dictionary
+			var raw_control: Variant = entry.get("control")
+			if not is_instance_valid(raw_control):
+				entries.remove_at(index)
+				continue
+			var suspended_control := raw_control as Control
+			if suspended_control != control:
+				continue
+			entry["focus_mode"] = focus_mode
+			control.focus_mode = Control.FOCUS_NONE
+			_collapsed_focus_modes[region] = entries
+			return true
+		_collapsed_focus_modes[region] = entries
+	return false
+
+
+func _claim_terminal_presentation_focus_mode(control: Control) -> int:
+	for index: int in range(_terminal_suspended_focus_modes.size() - 1, -1, -1):
+		var entry := _terminal_suspended_focus_modes[index]
+		var raw_control: Variant = entry.get("control")
+		if not is_instance_valid(raw_control):
+			_terminal_suspended_focus_modes.remove_at(index)
+			continue
+		var suspended_control := raw_control as Control
+		if suspended_control != control:
+			continue
+		var presentation_mode := int(entry.get("presentation_focus_mode", entry.get("focus_mode", Control.FOCUS_NONE)))
+		if presentation_mode != Control.FOCUS_NONE:
+			_terminal_suspended_focus_modes.remove_at(index)
+		return presentation_mode
+	return Control.FOCUS_NONE
+
+
+func _terminal_control_is_presentationally_available(control: Control) -> bool:
+	if control == null or not is_instance_valid(control) or not control.is_inside_tree() or not control.is_visible_in_tree():
+		return false
+	return not (control is BaseButton and (control as BaseButton).disabled)
+
+
+func _terminal_control_is_focus_eligible(control: Control, presentation_mode: int) -> bool:
+	return presentation_mode != Control.FOCUS_NONE and _terminal_control_is_presentationally_available(control)
+
+
+func _terminal_focus_suspension_active() -> bool:
+	var panel := get_node_or_null("TerminalExtraction") as TerminalExtractionPanel
+	return (panel != null and panel.visible) or not _terminal_suspended_focus_modes.is_empty()
+
+
+func _prepare_region_collapse(region: StringName, user_initiated: bool) -> void:
+	if user_initiated and not _child_modal_owns_focus():
+		var owner := _hud_viewport().gui_get_focus_owner() as Control
+		if _region_contains_control(region, owner):
+			_collapsed_focus_descriptors[region] = focus_descriptor_for(owner)
+		var header := _region_header(region)
+		if header.is_inside_tree():
+			header.grab_focus()
+	_suspend_region_focus(region)
+
+
+func _finish_region_expand(region: StringName, user_initiated: bool) -> void:
+	if not _terminal_focus_suspension_active():
+		_restore_region_focus_modes(region)
+	if user_initiated:
+		call_deferred("_restore_region_focus", region)
+
+
+func _restore_region_focus(region: StringName) -> void:
+	if _child_modal_owns_focus() or _terminal_focus_suspension_active():
+		return
+	var descriptor := _collapsed_focus_descriptors.get(region, {}) as Dictionary
+	if not descriptor.is_empty() and restore_focus_descriptor(descriptor, false):
+		return
+	if region == REGION_PARTY and current_projection != null:
+		var leader := current_projection.leader()
+		if leader != null and _focus_member(leader.member_id, &"leader_anchor"):
+			return
+		for member: PartyMemberHudProjection in current_projection.members:
+			if _focus_member(member.member_id, &"roster_member"):
+				return
+	elif region == REGION_ALERTS and current_projection != null:
+		for alert: CombatAlertProjection in current_projection.visible_alerts:
+			if _grab_valid_focus(_alert_action_control(alert.stable_id, &"inspect")):
+				return
+		if _grab_valid_focus(get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control):
+			return
+	_grab_valid_focus(_region_header(region))
+
+
+func _present_disclosure(region: StringName, collapsed: bool) -> void:
+	var target_rotation := 0.0 if collapsed else PI / 2.0
+	var prior := _disclosure_tweens.get(region) as Tween
+	var already_presented := _disclosure_presented_states.has(region)
+	var state_changed := not already_presented or bool(_disclosure_presented_states.get(region, collapsed)) != collapsed
+	_disclosure_presented_states[region] = collapsed
+	if settings != null and settings.reduced_motion:
+		if prior != null and prior.is_valid():
+			prior.kill()
+		_set_disclosure_rotation(target_rotation, region)
+		_disclosure_tweens.erase(region)
+		return
+	if not state_changed:
+		if prior == null or not prior.is_valid():
+			_set_disclosure_rotation(target_rotation, region)
+		return
+	if prior != null and prior.is_valid():
+		prior.kill()
+	if not already_presented or settings == null:
+		_set_disclosure_rotation(target_rotation, region)
+		_disclosure_tweens.erase(region)
+		return
+	var tween := create_tween()
+	_disclosure_tweens[region] = tween
+	tween.tween_method(_set_disclosure_rotation.bind(region), disclosure_rotation_for(region), target_rotation, float(LivingForgeTokens.motion_ms(&"focus", false)) / 1000.0)
+
+
+func _set_disclosure_rotation(value: float, region: StringName) -> void:
+	_disclosure_rotations[region] = value
+	_header_visual_control(region).queue_redraw()
+
+
+func disclosure_rotation_for(region: StringName) -> float:
+	return float(_disclosure_rotations.get(region, 0.0))
+
+
+func _present_region_headers() -> void:
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	_present_disclosure(REGION_PARTY, _party_collapsed)
+	_present_disclosure(REGION_ALERTS, _alerts_collapsed)
+	if current_projection == null:
+		party_header.accessibility_name = "Party unavailable, %s" % _region_state_label(_party_collapsed)
+		alerts_header.accessibility_name = "Alerts unavailable, %s" % _region_state_label(_alerts_collapsed)
+		party_header.accessibility_description = _region_accessibility_description("Party", "party", _party_collapsed, false)
+		alerts_header.accessibility_description = _region_accessibility_description("Alerts", "alert", _alerts_collapsed, false)
+		_set_header_visual_state(REGION_PARTY, _base_header_visual_state("PARTY · UNAVAILABLE", CombatHudProjection.NO_ALERT_SEVERITY, false))
+		_set_header_visual_state(REGION_ALERTS, _base_header_visual_state("ALERTS · UNAVAILABLE", CombatHudProjection.NO_ALERT_SEVERITY, false))
+		_set_tray_action_eligibility(tray_action, 0)
+		_reconcile_terminal_focus_suspension()
+		return
+	var leader := current_projection.leader()
+	var highest_severity := current_projection.highest_alert_severity()
+	var dead := current_projection.alert_count_for(CombatAlertProjection.Severity.DEAD)
+	var downed := current_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED)
+	var critical := current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL)
+	var party_summary := "PARTY · %d MEMBERS" % current_projection.members.size()
+	var party_state := _base_header_visual_state(party_summary, highest_severity, true)
+	if leader != null:
+		if _party_collapsed:
+			party_summary = _collapsed_party_summary(current_projection.members.size(), leader.display_name, highest_severity, dead, downed, critical)
+			party_state = _base_header_visual_state(party_summary, highest_severity, true)
+		party_state["health_visible"] = _party_collapsed
+		party_state["health_value"] = leader.health
+		party_state["health_max"] = leader.max_health
+		party_state["health_text"] = "%d / %d" % [roundi(leader.health), roundi(leader.max_health)]
+		var health_critical := leader.is_dead or leader.is_downed or leader.health / maxf(leader.max_health, 1.0) <= CombatHudViewModel.CRITICAL_HEALTH_RATIO
+		party_state["health_fill_color"] = LivingForgeTokens.color(&"error" if health_critical else &"valid", _high_contrast)
+		party_state["track_color"] = LivingForgeTokens.color(&"surface_inset", _high_contrast)
+		party_state["track_outline_width"] = 2 if _high_contrast else 1
+		party_state["track_outline_color"] = LivingForgeTokens.color(&"disabled", _high_contrast)
+	_set_header_visual_state(REGION_PARTY, party_state)
+	party_header.accessibility_name = _party_accessibility_name()
+	party_header.accessibility_description = _region_accessibility_description("Party", "party", _party_collapsed, true)
+	var highest := current_projection.highest_severity_alert()
+	var alerts_summary := "ALERTS · ALL CLEAR"
+	if highest == null:
+		alerts_summary = "ALERTS · ALL CLEAR"
+	elif not _alerts_collapsed:
+		alerts_summary = "ALERTS · %d" % current_projection.all_alerts.size()
+	else:
+		alerts_summary = "ALERTS %d · %s · %s" % [current_projection.all_alerts.size(), _severity_label(highest.severity), highest.summary]
+	_set_header_visual_state(REGION_ALERTS, _base_header_visual_state(alerts_summary, highest_severity, true))
+	alerts_header.accessibility_name = _alerts_accessibility_name()
+	alerts_header.accessibility_description = _region_accessibility_description("Alerts", "alert", _alerts_collapsed, true)
+	_set_tray_action_eligibility(tray_action, current_projection.all_alerts.size())
+	_configure_alert_focus_neighbors()
+	_reconcile_terminal_focus_suspension()
+
+
+func _region_state_label(collapsed: bool) -> String:
+	return "collapsed" if collapsed else "expanded"
+
+
+func _region_accessibility_description(region_label: String, detail_label: String, collapsed: bool, available: bool) -> String:
+	var state := "COLLAPSED" if collapsed else "EXPANDED"
+	var action := "EXPAND" if collapsed else "COLLAPSE"
+	var availability := "UNAVAILABLE and " if not available else ""
+	return "%s region is %s%s. Activate to %s %s details." % [region_label, availability, state, action, detail_label]
+
+
+func _collapsed_party_summary(member_count: int, leader_name: String, highest_severity: int, dead: int, downed: int, critical: int) -> String:
+	var hierarchy := ""
+	match highest_severity:
+		CombatAlertProjection.Severity.DEAD:
+			hierarchy = "HIGHEST: DEAD (%d) · DOWNED %d · CRITICAL %d" % [dead, downed, critical]
+		CombatAlertProjection.Severity.DOWNED:
+			hierarchy = "HIGHEST: DOWNED (%d) · DEAD %d · CRITICAL %d" % [downed, dead, critical]
+		CombatAlertProjection.Severity.CRITICAL:
+			hierarchy = "HIGHEST: CRITICAL (%d) · DEAD %d · DOWNED %d" % [critical, dead, downed]
+		_:
+			hierarchy = "HIGHEST: ALL CLEAR (0) · DEAD %d · DOWNED %d · CRITICAL %d" % [dead, downed, critical]
+	return "PARTY · %d MEMBERS · LEADER %s · %s" % [member_count, leader_name.to_upper(), hierarchy]
+
+
+func _severity_label(severity: int) -> String:
+	match severity:
+		CombatAlertProjection.Severity.DEAD: return "DEAD"
+		CombatAlertProjection.Severity.DOWNED: return "DOWNED"
+		CombatAlertProjection.Severity.CRITICAL: return "CRITICAL"
+	return "ALL CLEAR"
+
+
+func _severity_icon(severity: int) -> Texture2D:
+	match severity:
+		CombatAlertProjection.Severity.DEAD: return DEAD_STATE_ICON
+		CombatAlertProjection.Severity.DOWNED: return DOWNED_STATE_ICON
+		CombatAlertProjection.Severity.CRITICAL: return CRITICAL_STATE_ICON
+	return null
+
+
+func _base_header_visual_state(summary: String, severity: int, available: bool) -> Dictionary:
+	var icon := _severity_icon(severity) if available else null
+	var all_clear := available and severity == CombatHudProjection.NO_ALERT_SEVERITY
+	return {
+		"summary": summary,
+		"available": available,
+		"severity": severity,
+		"state_icon": icon,
+		"all_clear_visible": all_clear,
+		"state_color": LivingForgeTokens.color(&"valid" if all_clear else &"error", _high_contrast),
+		"health_visible": false,
+		"health_value": 0.0,
+		"health_max": 1.0,
+		"health_text": "",
+		"health_fill_color": LivingForgeTokens.color(&"valid", _high_contrast),
+		"track_color": LivingForgeTokens.color(&"surface_inset", _high_contrast),
+		"track_outline_width": 2 if _high_contrast else 1,
+		"track_outline_color": LivingForgeTokens.color(&"disabled", _high_contrast),
+	}
+
+
+func _set_header_visual_state(region: StringName, state: Dictionary) -> void:
+	_header_visual_states[region] = state
+	_header_visual_control(region).queue_redraw()
+
+
+func header_visual_state(region: StringName) -> Dictionary:
+	var state := _header_visual_states.get(region, {}) as Dictionary
+	return state.duplicate(true)
+
+
+func _header_visual_control(region: StringName) -> Control:
+	return get_node("Margin/CombatStatus/PartyHeader/Visual") as Control if region == REGION_PARTY else get_node("Margin/CombatStatus/AlertRegion/Header/Visual") as Control
+
+
+func header_visual_geometry(region: StringName) -> Dictionary:
+	var visual := _header_visual_control(region)
+	return _build_header_visual_geometry(region, visual.size)
+
+
+func _build_header_visual_geometry(region: StringName, visual_size: Vector2) -> Dictionary:
+	var header := _region_header(region)
+	var state := _header_visual_states.get(region, {}) as Dictionary
+	var font := header.get_theme_font(&"font")
+	var font_size := header.get_theme_font_size(&"font_size")
+	var font_height := maxf(font.get_height(font_size), 1.0)
+	var width := maxf(visual_size.x, header.size.x)
+	var height := maxf(visual_size.y, header.size.y)
+	var disclosure_rect := Rect2(HEADER_VISUAL_PADDING, (height - HEADER_DISCLOSURE_SIZE) * 0.5, HEADER_DISCLOSURE_SIZE, HEADER_DISCLOSURE_SIZE)
+	var cue_rect := Rect2(disclosure_rect.end.x + HEADER_VISUAL_GAP, (height - HEADER_STATE_CUE_SIZE) * 0.5, HEADER_STATE_CUE_SIZE, HEADER_STATE_CUE_SIZE)
+	var summary_left := cue_rect.end.x + HEADER_VISUAL_GAP
+	var health_visible := bool(state.get("health_visible", false))
+	var health_width := minf(HEADER_HEALTH_WIDTH, maxf(HEADER_HEALTH_MIN_WIDTH, width * 0.36)) if health_visible else 0.0
+	var health_left := width - HEADER_VISUAL_PADDING - health_width
+	var summary_right := health_left - HEADER_VISUAL_GAP if health_visible else width - HEADER_VISUAL_PADDING
+	var summary_width := maxf(summary_right - summary_left, 1.0)
+	var summary_lines := _wrap_header_text(String(state.get("summary", "")), font, font_size, summary_width)
+	var summary_height := font_height * float(maxi(summary_lines.size(), 1))
+	var summary_rect := Rect2(summary_left, maxf((height - summary_height) * 0.5, HEADER_VISUAL_PADDING), summary_width, summary_height)
+	var health_value_font_size := maxi(font_size - 2, 12)
+	var health_value_height := maxf(font.get_height(health_value_font_size), 1.0)
+	var health_cluster_height := HEADER_HEALTH_BAR_HEIGHT + 2.0 + health_value_height
+	var health_cluster_rect := Rect2(health_left, maxf((height - health_cluster_height) * 0.5, HEADER_VISUAL_PADDING), health_width, health_cluster_height) if health_visible else Rect2()
+	var health_bar_rect := Rect2(health_cluster_rect.position, Vector2(health_width, HEADER_HEALTH_BAR_HEIGHT)) if health_visible else Rect2()
+	var health_value_rect := Rect2(health_cluster_rect.position + Vector2(0.0, HEADER_HEALTH_BAR_HEIGHT + 2.0), Vector2(health_width, health_value_height)) if health_visible else Rect2()
+	var required_height := maxf(summary_height, health_cluster_height if health_visible else 0.0) + HEADER_VISUAL_PADDING * 2.0
+	return {
+		"font": font,
+		"font_size": font_size,
+		"font_height": font_height,
+		"health_value_font_size": health_value_font_size,
+		"health_value_font_height": health_value_height,
+		"disclosure_rect": disclosure_rect,
+		"state_cue_rect": cue_rect,
+		"summary_lines": summary_lines,
+		"summary_rect": summary_rect,
+		"health_cluster_rect": health_cluster_rect,
+		"health_bar_rect": health_bar_rect,
+		"health_value_rect": health_value_rect,
+		"required_height": required_height,
+	}
+
+
+func _wrap_header_text(text: String, font: Font, font_size: int, available_width: float) -> Array[String]:
+	var lines: Array[String] = []
+	var current := ""
+	for word: String in text.split(" ", false):
+		var candidate := word if current.is_empty() else "%s %s" % [current, word]
+		if current.is_empty() or font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x <= available_width:
+			current = candidate
+		else:
+			lines.append(current)
+			current = word
+	if not current.is_empty():
+		lines.append(current)
+	if lines.is_empty():
+		lines.append("")
+	return lines
+
+
+func _draw_region_header_visual(region: StringName, visual: Control) -> void:
+	var state := _header_visual_states.get(region, {}) as Dictionary
+	var geometry := _build_header_visual_geometry(region, visual.size)
+	var font := geometry["font"] as Font
+	var font_size := int(geometry["font_size"])
+	var font_height := float(geometry["font_height"])
+	var text_color := LivingForgeTokens.color(&"text_primary", _high_contrast)
+	var disclosure_rect := geometry["disclosure_rect"] as Rect2
+	var center := disclosure_rect.get_center()
+	var half := minf(disclosure_rect.size.x, disclosure_rect.size.y) * 0.28
+	visual.draw_set_transform(center, disclosure_rotation_for(region))
+	visual.draw_colored_polygon(PackedVector2Array([Vector2(-half, -half), Vector2(half, 0.0), Vector2(-half, half)]), text_color)
+	visual.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var cue_rect := geometry["state_cue_rect"] as Rect2
+	var state_color := state.get("state_color", Color.WHITE) as Color
+	var icon := state.get("state_icon") as Texture2D
+	if icon != null:
+		visual.draw_texture_rect(_semantic_header_icon(icon), cue_rect, false, state_color)
+	elif bool(state.get("all_clear_visible", false)):
+		visual.draw_string(font, Vector2(cue_rect.position.x, cue_rect.position.y + font.get_ascent(font_size)), "✓", HORIZONTAL_ALIGNMENT_CENTER, cue_rect.size.x, font_size, state_color)
+	var summary_rect := geometry["summary_rect"] as Rect2
+	var summary_lines := geometry["summary_lines"] as Array
+	for index: int in summary_lines.size():
+		var baseline := summary_rect.position + Vector2(0.0, font.get_ascent(font_size) + font_height * float(index))
+		visual.draw_string(font, baseline, String(summary_lines[index]), HORIZONTAL_ALIGNMENT_LEFT, summary_rect.size.x, font_size, text_color)
+	if not bool(state.get("health_visible", false)):
+		return
+	var health_bar_rect := geometry["health_bar_rect"] as Rect2
+	var outline_width := float(state.get("track_outline_width", 1))
+	visual.draw_rect(health_bar_rect, state.get("track_color", Color.BLACK), true)
+	visual.draw_rect(health_bar_rect, state.get("track_outline_color", Color.WHITE), false, outline_width)
+	var health_max := maxf(float(state.get("health_max", 1.0)), 1.0)
+	var health_ratio := clampf(float(state.get("health_value", 0.0)) / health_max, 0.0, 1.0)
+	if health_ratio > 0.0:
+		var fill_rect := health_bar_rect.grow(-outline_width)
+		fill_rect.size.x *= health_ratio
+		if fill_rect.size.x > 0.0 and fill_rect.size.y > 0.0:
+			visual.draw_rect(fill_rect, state.get("health_fill_color", Color.WHITE), true)
+	var health_value_rect := geometry["health_value_rect"] as Rect2
+	var health_value_font_size := int(geometry["health_value_font_size"])
+	visual.draw_string(font, Vector2(health_value_rect.position.x, health_value_rect.position.y + font.get_ascent(health_value_font_size)), String(state.get("health_text", "")), HORIZONTAL_ALIGNMENT_CENTER, health_value_rect.size.x, health_value_font_size, text_color)
+
+
+func _semantic_header_icon(source: Texture2D) -> Texture2D:
+	var cache_key := source.resource_path
+	if _semantic_header_icon_cache.has(cache_key):
+		return _semantic_header_icon_cache[cache_key] as Texture2D
+	var image := source.get_image()
+	if image == null or image.is_empty():
+		return source
+	image.convert(Image.FORMAT_RGBA8)
+	for y: int in image.get_height():
+		for x: int in image.get_width():
+			var alpha := image.get_pixel(x, y).a
+			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, alpha))
+	var semantic_icon := ImageTexture.create_from_image(image)
+	_semantic_header_icon_cache[cache_key] = semantic_icon
+	return semantic_icon
+
+
+func _party_accessibility_name() -> String:
+	if current_projection == null:
+		return "Party unavailable, %s" % _region_state_label(_party_collapsed)
+	var leader := current_projection.leader()
+	var leader_copy := "No leader"
+	if leader != null:
+		leader_copy = "Leader %s, health %d of %d" % [leader.display_name, roundi(leader.health), roundi(leader.max_health)]
+	return "Party, %d members, %s, highest severity %s, dead %d, downed %d, critical %d, %s" % [
+		current_projection.members.size(),
+		leader_copy,
+		_severity_label(current_projection.highest_alert_severity()),
+		current_projection.alert_count_for(CombatAlertProjection.Severity.DEAD),
+		current_projection.alert_count_for(CombatAlertProjection.Severity.DOWNED),
+		current_projection.alert_count_for(CombatAlertProjection.Severity.CRITICAL),
+		_region_state_label(_party_collapsed),
+	]
+
+
+func _alerts_accessibility_name() -> String:
+	if current_projection == null:
+		return "Alerts unavailable, %s" % _region_state_label(_alerts_collapsed)
+	if current_projection.all_alerts.is_empty():
+		return "Alerts, all clear, %s" % _region_state_label(_alerts_collapsed)
+	var highest := current_projection.highest_severity_alert()
+	return "Alerts, %d, highest severity %s, %s, %s" % [
+		current_projection.all_alerts.size(),
+		_severity_label(highest.severity),
+		highest.summary,
+		_region_state_label(_alerts_collapsed),
+	]
+
+
+func _set_tray_action_eligibility(action: Button, alert_count: int) -> void:
+	var eligible := alert_count > 0
+	action.visible = eligible
+	action.disabled = not eligible
+	_set_presentation_focus_mode(action, Control.FOCUS_ALL if eligible else Control.FOCUS_NONE)
+	if not eligible and action.has_focus():
+		action.release_focus()
+	action.text = "VIEW ALL ALERTS (%d)" % alert_count
+	action.accessibility_name = "View all %d combat %s" % [alert_count, "alert" if alert_count == 1 else "alerts"] if eligible else "No combat alerts"
 
 
 func set_leader(_actor: PartyActor) -> void:
@@ -204,6 +904,8 @@ func open_inspector_for_member(member_id: int, return_focus: Control) -> bool:
 func focus_descriptor_for(control: Control) -> Dictionary:
 	if control == null or not is_instance_valid(control):
 		return {}
+	if control == get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction"):
+		return {"kind": &"named", "named_control": &"alerts_tray_action"}
 	if control == get_node("Margin/CombatStatus/AlertRegion/Overflow"):
 		return {"kind": &"overflow", "named_control": &"alert_overflow"}
 	var cursor: Node = control
@@ -232,10 +934,10 @@ func focus_descriptor_for(control: Control) -> Dictionary:
 	return {}
 
 
-func restore_focus_descriptor(descriptor: Dictionary) -> bool:
+func restore_focus_descriptor(descriptor: Dictionary, allow_global_fallback := true) -> bool:
 	_deferred_focus_descriptor.clear()
 	if descriptor.is_empty():
-		return _focus_named_safe_control()
+		return _focus_named_safe_control() if allow_global_fallback else false
 	var kind := StringName(descriptor.get("kind", &""))
 	if kind == &"alert_action":
 		var exact := _alert_action_control(StringName(descriptor.get("stable_alert_id", &"")), StringName(descriptor.get("action", &"inspect")))
@@ -250,6 +952,8 @@ func restore_focus_descriptor(descriptor: Dictionary) -> bool:
 	elif kind == &"named":
 		if _grab_valid_focus(_named_focus_control(StringName(descriptor.get("named_control", &"")))):
 			return true
+	if not allow_global_fallback:
+		return false
 	if kind == &"alert_action":
 		if current_projection != null and not current_projection.all_alerts.is_empty():
 			var index := clampi(int(descriptor.get("order_index", 0)), 0, current_projection.all_alerts.size() - 1)
@@ -310,7 +1014,9 @@ func _refresh_projection(force_structure: bool) -> void:
 	current_projection = projection
 	_clear_unavailable()
 	_last_viewport_size = _hud_viewport().get_visible_rect().size.round() as Vector2i
-	_metrics = CombatHudResponsiveLayout.resolve(_last_viewport_size, settings.ui_scale_percent, settings.text_scale_percent, projection.members.size())
+	_present_region_headers()
+	var party_header_height := _reflow_party_header()
+	_metrics = CombatHudResponsiveLayout.resolve(_last_viewport_size, settings.ui_scale_percent, settings.text_scale_percent, projection.members.size(), party_header_height)
 	var leader_card := get_node("Margin/CombatStatus/LeaderCard") as ForgePartyMemberCard
 	_reflow_leader_region(leader_card.apply_leader_density(_uses_compact_leader_density()))
 	var next_revision := _view_model.ordered_party_revision(party_manager)
@@ -323,6 +1029,7 @@ func _refresh_projection(force_structure: bool) -> void:
 		_present_live_member_controls()
 	_present_status()
 	_present_alerts()
+	_present_region_headers()
 	_refresh_open_tray()
 
 
@@ -331,7 +1038,9 @@ func _uses_compact_leader_density() -> bool:
 
 
 func _reflow_leader_region(leader_height: float) -> void:
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Control
 	var leader := get_node("Margin/CombatStatus/LeaderCard") as Control
+	leader.offset_top = party_header.offset_bottom + float(LivingForgeTokens.spacing(&"standard"))
 	leader.offset_bottom = leader.offset_top + leader_height
 	var experience := get_node("Margin/CombatStatus/Experience") as Control
 	experience.offset_top = leader.offset_bottom + 4.0
@@ -340,10 +1049,29 @@ func _reflow_leader_region(leader_height: float) -> void:
 	party_region.offset_top = experience.offset_bottom + 8.0
 
 
+func _reflow_party_header() -> float:
+	var header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	var scale := maxf(float(settings.ui_scale_percent), float(settings.text_scale_percent)) / 100.0
+	var maximum_height := maxf(48.0 * scale, _hud_viewport().get_visible_rect().size.y - header.position.y - 16.0)
+	var semantic_height := _measure_header_summary_height(header, REGION_PARTY, maximum_height)
+	var header_height := clampf(maxf(header.get_combined_minimum_size().y, 48.0 * scale), semantic_height, maximum_height)
+	_set_bottom_offset_if_changed(header, header.offset_top + header_height)
+	_header_visual_control(REGION_PARTY).queue_redraw()
+	return header_height
+
+
+func _measure_header_summary_height(header: Button, region: StringName, maximum_height: float) -> float:
+	var geometry := _build_header_visual_geometry(region, Vector2(maxf(header.size.x, header.custom_minimum_size.x), maximum_height))
+	return clampf(float(geometry.get("required_height", 48.0)), 48.0, maximum_height)
+
+
 func _rebuild_member_controls() -> void:
+	if _party_collapsed:
+		_restore_region_focus_modes(REGION_PARTY)
 	_clear_member_controls()
 	var members := current_projection.members
 	if members.is_empty():
+		_reconcile_terminal_focus_suspension()
 		return
 	var leader := _leader_projection(members)
 	var leader_card := get_node("Margin/CombatStatus/LeaderCard") as ForgePartyMemberCard
@@ -365,14 +1093,17 @@ func _rebuild_member_controls() -> void:
 		var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
 		previous.visible = false
 		previous.disabled = true
-		previous.focus_mode = Control.FOCUS_NONE
+		_set_presentation_focus_mode(previous, Control.FOCUS_NONE)
 		next.visible = false
 		next.disabled = true
-		next.focus_mode = Control.FOCUS_NONE
+		_set_presentation_focus_mode(next, Control.FOCUS_NONE)
 		_rebuild_rich_followers(members)
 	else:
 		_rebuild_compact_page(members)
 	_configure_member_focus_neighbors()
+	if _party_collapsed:
+		_suspend_region_focus(REGION_PARTY)
+	_reconcile_terminal_focus_suspension()
 
 
 func _rebuild_rich_followers(members: Array[PartyMemberHudProjection]) -> void:
@@ -423,9 +1154,13 @@ func _present_live_member_controls() -> void:
 	for member: PartyMemberHudProjection in current_projection.members:
 		if member.is_leader:
 			leader_card.present(member)
+			if _party_collapsed:
+				_set_presentation_focus_mode(leader_card, leader_card.focus_mode)
 		var control := _member_controls_by_id.get(member.member_id) as ForgePartyMemberCard
 		if control != null:
 			control.present(member)
+			if _party_collapsed:
+				_set_presentation_focus_mode(control, control.focus_mode)
 
 
 func _present_status() -> void:
@@ -445,6 +1180,8 @@ func _present_status() -> void:
 
 
 func _present_alerts() -> void:
+	if _alerts_collapsed:
+		_restore_region_focus_modes(REGION_ALERTS)
 	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
 	var candidates := current_projection.visible_alerts
 	var wanted: Dictionary = {}
@@ -454,18 +1191,23 @@ func _present_alerts() -> void:
 		var stable_id := StringName(stable_value)
 		if wanted.has(stable_id):
 			continue
-		var stale := _alert_controls_by_id[stable_id] as Control
+		var stale_value: Variant = _alert_controls_by_id[stable_id]
 		_alert_controls_by_id.erase(stable_id)
-		stale.free()
+		if is_instance_valid(stale_value):
+			var stale := stale_value as Control
+			if stale != null:
+				stale.free()
 	for index: int in candidates.size():
 		var alert := candidates[index]
-		var card := _alert_controls_by_id.get(alert.stable_id) as ForgeAlertCard
+		var card: ForgeAlertCard
+		var card_value: Variant = _alert_controls_by_id.get(alert.stable_id)
+		if is_instance_valid(card_value):
+			card = card_value as ForgeAlertCard
 		if card == null:
 			card = ALERT_CARD_SCENE.instantiate() as ForgeAlertCard
 			card.custom_minimum_size = Vector2(472.0, 172.0)
 			_alert_controls_by_id[alert.stable_id] = card
 			stack.add_child(card)
-			card.minimum_size_changed.connect(_queue_alert_budget_reflow)
 			card.inspect_requested.connect(_on_alert_inspect_requested.bind(card))
 			card.ledger_requested.connect(_on_alert_ledger_requested.bind(card))
 		card.set_meta(&"stable_alert_id", alert.stable_id)
@@ -475,39 +1217,45 @@ func _present_alerts() -> void:
 		card.visible = true
 		stack.move_child(card, index)
 	_apply_alert_budget()
-	_queue_alert_budget_reflow()
-
-
-func _queue_alert_budget_reflow() -> void:
-	if _alert_budget_reflow_queued:
-		return
-	_alert_budget_reflow_queued = true
-	call_deferred(&"_apply_deferred_alert_budget")
-
-
-func _apply_deferred_alert_budget() -> void:
-	_alert_budget_reflow_queued = false
-	if current_projection != null:
-		_apply_alert_budget()
+	if _alerts_collapsed:
+		_suspend_region_focus(REGION_ALERTS)
+	_reconcile_terminal_focus_suspension()
 
 
 func _apply_alert_budget() -> void:
 	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as VBoxContainer
-	var stack_parent := stack.get_parent_control()
-	var vertical_budget := maxf(
-		stack_parent.size.y * (stack.anchor_bottom - stack.anchor_top) + stack.offset_bottom - stack.offset_top,
-		0.0,
-	)
-	if vertical_budget <= 0.0:
-		vertical_budget = maxf(_hud_viewport().get_visible_rect().size.y - 188.0, 1.0)
+	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	if _alerts_collapsed:
+		stack.visible = false
+		overflow.visible = false
+		overflow.disabled = true
+		_set_presentation_focus_mode(overflow, Control.FOCUS_NONE)
+		if overflow.has_focus():
+			overflow.release_focus()
+		_reflow_alert_rows(false)
+		return
+	_reflow_alert_rows(false)
 	var separation := float(stack.get_theme_constant(&"separation"))
+	var visible_alerts := current_projection.visible_alerts
+	var required_height := 0.0
+	var card_minimums: Dictionary = {}
+	for index: int in visible_alerts.size():
+		var candidate := visible_alerts[index]
+		var candidate_card := _alert_controls_by_id.get(candidate.stable_id) as ForgeAlertCard
+		if candidate_card != null:
+			var candidate_minimum := candidate_card.synchronize_content_minimum()
+			card_minimums[candidate.stable_id] = candidate_minimum
+			required_height += candidate_minimum.y + (separation if index > 0 else 0.0)
+	var reserve_overflow := current_projection.all_alerts.size() > visible_alerts.size() or required_height > _alert_stack_vertical_budget(stack)
+	_reflow_alert_rows(reserve_overflow)
+	var vertical_budget := _alert_stack_vertical_budget(stack)
 	var rendered_count := 0
 	var used_height := 0.0
-	for alert: CombatAlertProjection in current_projection.visible_alerts:
+	for alert: CombatAlertProjection in visible_alerts:
 		var card := _alert_controls_by_id.get(alert.stable_id) as ForgeAlertCard
 		if card == null:
 			continue
-		var card_minimum := card.synchronize_content_minimum()
+		var card_minimum := card_minimums.get(alert.stable_id, card.get_combined_minimum_size()) as Vector2
 		var next_height := used_height + (separation if rendered_count > 0 else 0.0) + card_minimum.y
 		var render_card := rendered_count == 0 or next_height <= vertical_budget
 		card.set_interaction_disabled(not render_card)
@@ -515,16 +1263,112 @@ func _apply_alert_budget() -> void:
 		if render_card:
 			used_height = next_height
 			rendered_count += 1
-	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
 	var overflow_count := maxi(0, current_projection.all_alerts.size() - rendered_count)
 	overflow.visible = overflow_count > 0
 	overflow.disabled = not overflow.visible
-	overflow.focus_mode = Control.FOCUS_ALL if overflow.visible else Control.FOCUS_NONE
+	_set_presentation_focus_mode(overflow, Control.FOCUS_ALL if overflow.visible else Control.FOCUS_NONE)
 	if not overflow.visible and overflow.has_focus():
 		overflow.release_focus()
 	overflow.text = "+%d %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
 	overflow.accessibility_name = "Open %d additional combat %s" % [overflow_count, "alert" if overflow_count == 1 else "alerts"]
+	_reflow_alert_rows(overflow.visible)
 	_configure_alert_focus_neighbors()
+
+
+func _alert_stack_vertical_budget(stack: Control) -> float:
+	var stack_parent := stack.get_parent_control()
+	var budget := maxf(
+		stack_parent.size.y * (stack.anchor_bottom - stack.anchor_top) + stack.offset_bottom - stack.offset_top,
+		0.0,
+	)
+	if budget <= 0.0:
+		return maxf(_hud_viewport().get_visible_rect().size.y - 188.0, 1.0)
+	return budget
+
+
+func _reflow_alert_rows(reserve_overflow: bool) -> void:
+	var region := get_node("Margin/CombatStatus/AlertRegion") as Control
+	var header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var stack := get_node("Margin/CombatStatus/AlertRegion/ExpandedAlerts") as Control
+	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
+	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	var compact_gap := float(LivingForgeTokens.spacing(&"compact"))
+	var scale := maxf(float(settings.ui_scale_percent), float(settings.text_scale_percent)) / 100.0
+	var tray_height := maxf(48.0, tray_action.get_combined_minimum_size().y)
+	var viewport_width := maxf(_hud_viewport().get_visible_rect().size.x, 1.0)
+	var boss_banner := get_node("BossBanner") as Control
+	var loot_status := get_node("LootStatus") as Control
+	var center_status_right := maxf(boss_banner.get_global_rect().end.x, loot_status.get_global_rect().end.x)
+	var region_right := viewport_width + region.offset_right
+	var maximum_region_width := maxf(region_right - center_status_right - compact_gap, 1.0)
+	var tray_natural_width := maxf(192.0, tray_action.get_combined_minimum_size().x)
+	var preferred_header_width := _preferred_header_width(header, REGION_ALERTS)
+	var preferred_inline_width := preferred_header_width + compact_gap + tray_natural_width
+	var preferred_region_width := maxf(ALERT_REGION_BASE_WIDTH, preferred_inline_width)
+	var desired_region_width := preferred_region_width if tray_action.visible and preferred_region_width <= maximum_region_width else minf(ALERT_REGION_BASE_WIDTH, maximum_region_width)
+	_set_left_offset_if_changed(region, region.offset_right - desired_region_width)
+	var region_width := desired_region_width
+	var tray_width := minf(tray_natural_width, region_width)
+	var minimum_header_width := maxf(header.custom_minimum_size.x, header.get_combined_minimum_size().x)
+	var tray_shares_header_row := tray_action.visible and preferred_header_width + compact_gap + tray_width <= region_width
+	var header_right := region_width - tray_width - compact_gap if tray_shares_header_row else region_width
+	_set_offsets_if_changed(header, 0.0, 0.0, header_right, header.offset_bottom)
+	var wrapped_tray_reservation := tray_height + compact_gap if tray_action.visible and not tray_shares_header_row else 0.0
+	var maximum_header_height := maxf(48.0 * scale, region.size.y - wrapped_tray_reservation)
+	var semantic_height := _measure_header_summary_height(header, REGION_ALERTS, maximum_header_height)
+	var header_height := clampf(maxf(header.get_combined_minimum_size().y, 48.0 * scale), semantic_height, maximum_header_height)
+	_set_bottom_offset_if_changed(header, header_height)
+	_header_visual_control(REGION_ALERTS).queue_redraw()
+	var tray_top := 0.0 if tray_shares_header_row else header_height + compact_gap
+	_set_offsets_if_changed(tray_action, region_width - tray_width, tray_top, region_width, tray_top + tray_height)
+	var top_rows_bottom := maxf(header_height, tray_top + tray_height if tray_action.visible else header_height)
+	var reserved_bottom := 0.0
+	var overflow_height := maxf(48.0, overflow.get_combined_minimum_size().y)
+	if reserve_overflow:
+		_set_vertical_offsets_if_changed(overflow, -overflow_height, 0.0)
+		reserved_bottom += overflow_height + compact_gap
+	var stack_top := top_rows_bottom + compact_gap
+	var stack_bottom := -reserved_bottom
+	if region.size.y > 0.0 and stack_top > region.size.y + stack_bottom:
+		stack_bottom = stack_top - region.size.y
+	_set_vertical_offsets_if_changed(stack, stack_top, stack_bottom)
+
+
+func _preferred_header_width(header: Button, region: StringName) -> float:
+	var state := _header_visual_states.get(region, {}) as Dictionary
+	var font := header.get_theme_font(&"font")
+	var font_size := header.get_theme_font_size(&"font_size")
+	var summary_width := font.get_string_size(String(state.get("summary", "")), HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
+	var semantic_width := HEADER_VISUAL_PADDING * 2.0 + HEADER_DISCLOSURE_SIZE + HEADER_STATE_CUE_SIZE + HEADER_VISUAL_GAP * 2.0 + summary_width
+	return maxf(maxf(header.custom_minimum_size.x, header.get_combined_minimum_size().x), semantic_width)
+
+
+func _set_left_offset_if_changed(control: Control, value: float) -> void:
+	if not is_equal_approx(control.offset_left, value):
+		control.offset_left = value
+
+
+func _set_bottom_offset_if_changed(control: Control, value: float) -> void:
+	if not is_equal_approx(control.offset_bottom, value):
+		control.offset_bottom = value
+
+
+func _set_vertical_offsets_if_changed(control: Control, top: float, bottom: float) -> void:
+	if not is_equal_approx(control.offset_top, top):
+		control.offset_top = top
+	if not is_equal_approx(control.offset_bottom, bottom):
+		control.offset_bottom = bottom
+
+
+func _set_offsets_if_changed(control: Control, left: float, top: float, right: float, bottom: float) -> void:
+	if not is_equal_approx(control.offset_left, left):
+		control.offset_left = left
+	if not is_equal_approx(control.offset_top, top):
+		control.offset_top = top
+	if not is_equal_approx(control.offset_right, right):
+		control.offset_right = right
+	if not is_equal_approx(control.offset_bottom, bottom):
+		control.offset_bottom = bottom
 
 
 func _refresh_runtime_text() -> void:
@@ -553,7 +1397,7 @@ func _present_page_status() -> void:
 
 func _sync_page_action_focus(action: Button) -> void:
 	var eligible := action.visible and not action.disabled
-	action.focus_mode = Control.FOCUS_ALL if eligible else Control.FOCUS_NONE
+	_set_presentation_focus_mode(action, Control.FOCUS_ALL if eligible else Control.FOCUS_NONE)
 	if not eligible and action.has_focus():
 		action.release_focus()
 
@@ -564,6 +1408,14 @@ func _on_previous_page() -> void:
 
 func _on_next_page() -> void:
 	_set_page(_current_page + 1)
+
+
+func _on_party_header_pressed() -> void:
+	_set_party_collapsed(not _party_collapsed, true)
+
+
+func _on_alerts_header_pressed() -> void:
+	_set_alerts_collapsed(not _alerts_collapsed, true)
 
 
 func _set_page(page: int) -> void:
@@ -608,8 +1460,17 @@ func _on_ledger_route(member_id: int, return_focus: Control) -> void:
 
 
 func _on_overflow_pressed() -> void:
-	if current_projection != null:
-		(get_node("CombatAlertTray") as CombatAlertTray).open(current_projection.all_alerts, get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control)
+	_open_alert_tray(get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control)
+
+
+func _on_alerts_tray_action_pressed() -> void:
+	_open_alert_tray(get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Control)
+
+
+func _open_alert_tray(return_focus: Control) -> void:
+	if current_projection == null or current_projection.all_alerts.is_empty():
+		return
+	(get_node("CombatAlertTray") as CombatAlertTray).open(current_projection.all_alerts, return_focus)
 
 
 func _refresh_open_tray() -> void:
@@ -764,16 +1625,21 @@ func _clear_presentation() -> void:
 	leader.set_meta(&"member_id", 0)
 	(get_node("Margin/CombatStatus/BossRegion") as Control).visible = false
 	for card_value: Variant in _alert_controls_by_id.values():
-		(card_value as Control).free()
+		if is_instance_valid(card_value):
+			var card := card_value as Control
+			if card != null:
+				card.free()
 	_alert_controls_by_id.clear()
 	(get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control).visible = false
+	_present_region_headers()
 
 
 func _clear_member_controls() -> void:
 	for control_value: Variant in _member_controls_by_id.values():
-		var control := control_value as Control
-		if control != null and is_instance_valid(control):
-			control.free()
+		if is_instance_valid(control_value):
+			var control := control_value as Control
+			if control != null:
+				control.free()
 	_member_controls_by_id.clear()
 
 
@@ -807,35 +1673,59 @@ func _configure_member_focus_neighbors() -> void:
 	if controls.is_empty():
 		return
 	var columns := 2
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	party_header.focus_neighbor_right = party_header.get_path_to(alerts_header)
+	alerts_header.focus_neighbor_left = alerts_header.get_path_to(party_header)
 	for index: int in controls.size():
 		var control := controls[index]
 		control.focus_neighbor_left = control.get_path_to(controls[index - 1] if index > 0 else controls[-1])
 		control.focus_neighbor_right = control.get_path_to(controls[index + 1] if index + 1 < controls.size() else controls[0])
-		control.focus_neighbor_top = control.get_path_to(controls[index - columns] if index >= columns else controls[0])
+		control.focus_neighbor_top = control.get_path_to(controls[index - columns] if index >= columns else party_header)
 		control.focus_neighbor_bottom = control.get_path_to(controls[index + columns] if index + columns < controls.size() else controls[-1])
+	party_header.focus_neighbor_bottom = party_header.get_path_to(get_node("Margin/CombatStatus/LeaderCard") as Control)
 	if _metrics.mode == CombatHudResponsiveLayout.Mode.COMPACT:
 		var previous := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Button
 		var next := get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Button
+		previous.focus_neighbor_top = previous.get_path_to(party_header)
+		next.focus_neighbor_top = next.get_path_to(party_header)
 		previous.focus_neighbor_bottom = previous.get_path_to(controls[0])
 		next.focus_neighbor_bottom = next.get_path_to(controls[mini(1, controls.size() - 1)])
 
 
 func _configure_alert_focus_neighbors() -> void:
-	var controls: Array[Control] = []
+	var actions: Array[Control] = []
 	for alert: CombatAlertProjection in current_projection.visible_alerts:
-		var control := _alert_controls_by_id.get(alert.stable_id) as Control
-		if control != null and control.visible:
-			controls.append(control)
+		var card: Control
+		var card_value: Variant = _alert_controls_by_id.get(alert.stable_id)
+		if is_instance_valid(card_value):
+			card = card_value as Control
+		if card == null or not card.visible:
+			continue
+		for action_name: StringName in [&"inspect", &"ledger"]:
+			var action := _alert_action_control(alert.stable_id, action_name)
+			if action != null and action.is_visible_in_tree() and action.focus_mode != Control.FOCUS_NONE and (not action is BaseButton or not (action as BaseButton).disabled):
+				actions.append(action)
 	var overflow := get_node("Margin/CombatStatus/AlertRegion/Overflow") as Button
-	for index: int in controls.size():
-		var card := controls[index]
-		var top: Control = controls[index - 1] if index > 0 else (overflow if overflow.visible else controls[-1])
-		var bottom: Control = controls[index + 1] if index + 1 < controls.size() else (overflow if overflow.visible else controls[0])
-		card.focus_neighbor_top = card.get_path_to(top)
-		card.focus_neighbor_bottom = card.get_path_to(bottom)
-	if overflow.visible and not controls.is_empty():
-		overflow.focus_neighbor_top = overflow.get_path_to(controls[-1])
-		overflow.focus_neighbor_bottom = overflow.get_path_to(controls[0])
+	var tray_action := get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Button
+	var alerts_header := get_node("Margin/CombatStatus/AlertRegion/Header") as Button
+	var party_header := get_node("Margin/CombatStatus/PartyHeader") as Button
+	alerts_header.focus_neighbor_left = alerts_header.get_path_to(party_header)
+	party_header.focus_neighbor_right = party_header.get_path_to(alerts_header)
+	var terminal: Control = overflow if overflow.visible else (tray_action if tray_action.visible else alerts_header)
+	alerts_header.focus_neighbor_bottom = alerts_header.get_path_to(actions[0] if not actions.is_empty() else terminal)
+	for index: int in actions.size():
+		var action := actions[index]
+		var top: Control = alerts_header if index == 0 else actions[index - 1]
+		var bottom: Control = actions[index + 1] if index + 1 < actions.size() else terminal
+		action.focus_neighbor_top = action.get_path_to(top)
+		action.focus_neighbor_bottom = action.get_path_to(bottom)
+	if overflow.visible:
+		overflow.focus_neighbor_top = overflow.get_path_to(actions[-1] if not actions.is_empty() else alerts_header)
+		overflow.focus_neighbor_bottom = overflow.get_path_to(tray_action if tray_action.visible else alerts_header)
+	if tray_action.visible:
+		tray_action.focus_neighbor_top = tray_action.get_path_to(overflow if overflow.visible else (actions[-1] if not actions.is_empty() else alerts_header))
+		tray_action.focus_neighbor_left = tray_action.get_path_to(party_header)
 
 
 func _required_authority_error() -> String:
@@ -906,7 +1796,9 @@ func _alert_action_control(stable_id: StringName, preferred_action: StringName) 
 				card = child as Control
 				break
 	if card == null:
-		card = _alert_controls_by_id.get(stable_id) as Control
+		var card_value: Variant = _alert_controls_by_id.get(stable_id)
+		if is_instance_valid(card_value):
+			card = card_value as Control
 	if card == null or not card.is_visible_in_tree():
 		return null
 	for action: StringName in [preferred_action, &"inspect", &"ledger"]:
@@ -925,13 +1817,20 @@ func _focus_member(member_id: int, preferred_surface: StringName = &"") -> bool:
 	var leader := get_node("Margin/CombatStatus/LeaderCard") as Control
 	if preferred_surface == &"leader_anchor" and int(leader.get_meta(&"member_id", 0)) == member_id:
 		return _grab_valid_focus(leader)
-	var control := _member_controls_by_id.get(member_id) as Control
+	var control: Control
+	var control_value: Variant = _member_controls_by_id.get(member_id)
+	if is_instance_valid(control_value):
+		control = control_value as Control
 	if _grab_valid_focus(control):
 		return true
 	if _metrics != null and _metrics.mode == CombatHudResponsiveLayout.Mode.COMPACT:
 		var index := _party_index_for_member(member_id)
 		_set_page(floori(float(index) / float(maxi(_metrics.visible_member_count, 1))))
-		return _grab_valid_focus(_member_controls_by_id.get(member_id) as Control)
+		control_value = _member_controls_by_id.get(member_id)
+		control = null
+		if is_instance_valid(control_value):
+			control = control_value as Control
+		return _grab_valid_focus(control)
 	if int(leader.get_meta(&"member_id", 0)) == member_id:
 		return _grab_valid_focus(leader)
 	return false
@@ -952,6 +1851,7 @@ func _focus_named_safe_control() -> bool:
 
 func _named_focus_control(control_name: StringName) -> Control:
 	match control_name:
+		&"alerts_tray_action": return get_node("Margin/CombatStatus/AlertRegion/AlertsTrayAction") as Control
 		&"alert_overflow": return get_node("Margin/CombatStatus/AlertRegion/Overflow") as Control
 		&"page_previous": return get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PagePrevious") as Control
 		&"page_next": return get_node("Margin/CombatStatus/PartyRegion/CompactRoster/PageNext") as Control
