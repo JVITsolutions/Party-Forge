@@ -276,12 +276,12 @@ func _test_prologue_completion_semantics(failures: Array[String]) -> void:
 	TestAssertions.truthy(prologue.ok() and retry.ok() and retry.duplicate, "prologue completion retries by transaction", failures)
 	var saved := store.load_profile(ID, _root).profile
 	TestAssertions.equal(saved.prologue_state, ProfileState.PrologueState.COMPLETED, "prologue marks complete", failures)
-	TestAssertions.equal(saved.passive_points_available, 1, "prologue awards exactly one available point", failures)
-	TestAssertions.equal(saved.passive_points_lifetime_earned, 1, "prologue awards exactly one lifetime point", failures)
-	TestAssertions.truthy("city-heart" in saved.permanent_feature_unlocks, "prologue unlocks City heart", failures)
-	TestAssertions.truthy("party-forge-city-v1" in saved.discovered_trees, "prologue reveals City tree", failures)
-	TestAssertions.equal(saved.tree_allocations.get("party-forge-city-v1", []), ["city-heart"], "new prologue completion stores the explicit City root", failures)
-	TestAssertions.equal(retry.profile.tree_allocations.get("party-forge-city-v1", []), ["city-heart"], "prologue retry returns the explicit committed City root", failures)
+	TestAssertions.equal(saved.passive_points_available, 0, "prologue awards no passive point", failures)
+	TestAssertions.equal(saved.passive_points_lifetime_earned, 0, "prologue changes no lifetime point accounting", failures)
+	TestAssertions.truthy("city-heart" not in saved.permanent_feature_unlocks, "prologue no longer invents a City-heart feature unlock", failures)
+	TestAssertions.truthy("party-forge-city-v1" not in saved.discovered_trees, "prologue no longer reveals City", failures)
+	TestAssertions.equal(saved.tree_allocations.get("party-forge-city-v1", []), [], "prologue no longer seeds the City root", failures)
+	TestAssertions.equal(retry.profile.tree_allocations.get("party-forge-city-v1", []), [], "prologue retry preserves the no-reward result", failures)
 	var different_transaction := service.complete_prologue(ID, "prologue-complete-again", _root)
 	TestAssertions.truthy(not different_transaction.ok() and different_transaction.error.contains("prologue already completed with different transaction"), "completed state rejects a different transaction", failures)
 	var unchanged := store.load_profile(ID, _root).profile
@@ -297,9 +297,9 @@ func _test_prologue_canonicalizes_existing_projection(failures: Array[String]) -
 	var completed := ProfileMutationService.new(store).complete_prologue(ID, "canonical-prologue", _root)
 	var saved := store.load_profile(ID, _root).profile
 	TestAssertions.truthy(completed.ok(), "prologue completes with existing compatible projections", failures)
-	TestAssertions.equal(saved.permanent_feature_unlocks, ["city-heart", "zeta-unlock"], "prologue canonicalizes permanent unlocks", failures)
-	TestAssertions.equal(saved.discovered_trees, ["party-forge-city-v1", "zeta-tree"], "prologue canonicalizes tree discoveries", failures)
-	TestAssertions.equal(saved.tree_allocations["party-forge-city-v1"], ["city-heart", "legacy-node"], "prologue canonicalizes the City allocation projection", failures)
+	TestAssertions.equal(saved.permanent_feature_unlocks, ["zeta-unlock", "city-heart", "zeta-unlock"], "prologue preserves existing feature projections byte-for-byte in value order", failures)
+	TestAssertions.equal(saved.discovered_trees, ["zeta-tree", "party-forge-city-v1", "zeta-tree"], "prologue preserves existing tree discovery order and duplicates", failures)
+	TestAssertions.equal(saved.tree_allocations["party-forge-city-v1"], ["legacy-node", "city-heart", "legacy-node"], "prologue preserves the existing City allocation projection", failures)
 
 func _test_historical_prologue_duplicate_preserves_result(failures: Array[String]) -> void:
 	var store := ProfileStore.new()

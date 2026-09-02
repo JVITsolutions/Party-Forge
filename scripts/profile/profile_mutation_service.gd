@@ -333,28 +333,9 @@ func complete_prologue(profile_id: String, transaction_id: String, root: String 
 	return apply(profile_id, transaction_id, func(profile: ProfileState) -> String:
 		if profile.prologue_state == ProfileState.PrologueState.COMPLETED:
 			return "PROFILE_MUTATION_ERROR reason=prologue already completed with different transaction"
-		if profile.passive_points_available == ProfileCodec.JSON_SAFE_INTEGER_MAX or profile.passive_points_lifetime_earned == ProfileCodec.JSON_SAFE_INTEGER_MAX:
-			return "PROFILE_MUTATION_ERROR reason=passive point amount overflow"
 		profile.prologue_state = ProfileState.PrologueState.COMPLETED
-		profile.passive_points_available += 1
-		profile.passive_points_lifetime_earned += 1
-		profile.permanent_feature_unlocks = _canonical_strings(profile.permanent_feature_unlocks, "city-heart")
-		profile.discovered_trees = _canonical_strings(profile.discovered_trees, "party-forge-city-v1")
-		profile.tree_allocations["party-forge-city-v1"] = _canonical_strings(profile.tree_allocations.get("party-forge-city-v1", []), "city-heart")
 		return ""
 	, root, -1, "complete_prologue", {})
-
-static func _canonical_strings(values: Variant, required: String) -> Array[String]:
-	var result: Array[String] = []
-	if values is Array:
-		for value: Variant in values as Array:
-			var text := String(value)
-			if text not in result:
-				result.append(text)
-	if required not in result:
-		result.append(required)
-	result.sort()
-	return result
 
 static func _fingerprint(operation: String, request: Dictionary) -> String:
 	return ("%s\n%s" % [operation, JSON.stringify(_canonicalize(request))]).sha256_text()

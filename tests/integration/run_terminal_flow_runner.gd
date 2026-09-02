@@ -5,6 +5,8 @@ const SETTINGS_PATH := "user://tests/run_terminal_flow_settings.cfg"
 const MAIN_SCENE := preload("res://scenes/game/main.tscn")
 const RESTART_INTENT_PATH := "res://scripts/ui/run_setup/run_setup_restart_intent.gd"
 const ACTION_ROOT := "Frame/Content/Footer/Actions/"
+const CITY_TREE_ID := "party-forge-city-v1"
+const CITY_ROOT_NODE_ID := "city-heart"
 
 class CountingMutationService extends ProfileMutationService:
 	var apply_calls := 0
@@ -648,7 +650,17 @@ func _test_victory_defeat_recap_and_finalize_retention() -> void:
 		await _finalize_main(main, outcome)
 		var projection := main.get("_terminal_result_projection") as RunResultProjection
 		_assert(projection != null and _recap_outcome(projection) == label.capitalize(), "%s terminal event produces an exact %s recap" % [label, label])
-		_assert(not (fixture.store as ProfileStore).load_profile(fixture.profile_id, fixture.root).profile.terminal_resolution.is_empty(), "%s finalized recap retains its durable receipt until an action" % label)
+		var durable := (fixture.store as ProfileStore).load_profile(fixture.profile_id, fixture.root).profile
+		_assert(not durable.terminal_resolution.is_empty(), "%s finalized recap retains its durable receipt until an action" % label)
+		var city_allocations: Array = durable.tree_allocations.get(CITY_TREE_ID, [])
+		if outcome == RunTerminalSnapshot.Outcome.VICTORY:
+			_assert(durable.passive_points_available == 1 and durable.passive_points_lifetime_earned == 1, "victory terminal integration grants exactly one passive point")
+			_assert(durable.discovered_trees.count(CITY_TREE_ID) == 1, "victory terminal integration reveals City exactly once")
+			_assert(city_allocations.count(CITY_ROOT_NODE_ID) == 1, "victory terminal integration seeds City Heart exactly once")
+		else:
+			_assert(durable.passive_points_available == 0 and durable.passive_points_lifetime_earned == 0, "defeat terminal integration grants no passive point")
+			_assert(not durable.discovered_trees.has(CITY_TREE_ID), "defeat terminal integration does not reveal City")
+			_assert(city_allocations.is_empty(), "defeat terminal integration does not seed City Heart")
 		_cleanup_case(main, fixture)
 
 	var live := await _started_live_main("finalize-retention")

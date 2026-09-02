@@ -35,6 +35,8 @@ func run() -> Array[String]:
 	_test_protection_and_reducible_interruptions(failures)
 	_test_post_protection_resolution_failure_preserves_recovery(failures)
 	_test_generic_and_terminal_resolution_boundaries(failures)
+	_test_victory_reward_outcome_and_existing_city(failures)
+	_test_victory_reward_failure_atomicity(failures)
 	_test_terminal_duplicate_revalidates_live_resolved_truth(failures)
 	_test_projection_retry_uses_durable_truth_without_resolution_or_mutation(failures)
 	return failures
@@ -239,6 +241,9 @@ func _test_resolution_failure_retries_the_identical_request_and_mutates_once(fai
 	TestAssertions.equal(int(flow.call(&"state")), STATE_RESOLUTION_INTERRUPTED, "resolution failure enters the distinct resolution interruption state", failures)
 	TestAssertions.equal(resolution.get("request_documents").size(), 1, "failed resolution receives exactly one request", failures)
 	TestAssertions.equal(String((resolution.get("request_documents") as Array)[0].get("transaction_id", "")), exact_transaction, "failed resolution receives the confirmed transaction", failures)
+	var after_failure := store.load_profile(PROFILE_ID, root).profile
+	TestAssertions.equal(after_failure.passive_points_available, 0, "failed terminal resolution grants no passive point", failures)
+	TestAssertions.truthy(CityVictoryRewardPolicy.CITY_TREE_ID not in after_failure.discovered_trees, "failed terminal resolution does not reveal City", failures)
 	var retried: Variant = flow.call(&"resolve", PROFILE_ID, root)
 	TestAssertions.truthy(_ok(retried) and not bool(retried.get("duplicate")), "resolution retry succeeds without manufacturing a duplicate", failures)
 	TestAssertions.equal(resolution.get("request_documents").size(), 2, "resolution retry delegates exactly twice including the injected interruption", failures)
@@ -250,6 +255,8 @@ func _test_resolution_failure_retries_the_identical_request_and_mutates_once(fai
 	TestAssertions.truthy(durable.ok() and String(decoded.error).is_empty(), "once-only resolution leaves valid durable ownership", failures)
 	if durable.ok() and String(decoded.error).is_empty():
 		TestAssertions.equal((decoded.value as ItemRegistry).ids().count(ITEM_A), 1, "once-only resolution owns the selected item exactly once", failures)
+		TestAssertions.equal(durable.profile.passive_points_available, 1, "successful retry grants exactly one victory point", failures)
+		TestAssertions.equal(durable.profile.tree_allocations.get(CityVictoryRewardPolicy.CITY_TREE_ID, []), [CityVictoryRewardPolicy.CITY_ROOT_ID], "successful retry reveals City and seeds its free root", failures)
 	var after_success := FileAccess.get_sha256(store.profile_path(PROFILE_ID, root))
 	var invalid_post_success: Variant = flow.call(&"resolve", PROFILE_ID, root)
 	TestAssertions.truthy(not _ok(invalid_post_success), "resolved flow rejects a further resolution transition", failures)
@@ -341,6 +348,10 @@ func _test_generic_and_terminal_resolution_boundaries(failures: Array[String]) -
 	var durable: ProfileState = begun.store.load_profile(PROFILE_ID, begun.root).profile
 	TestAssertions.equal(durable.resumable_run, {}, "terminal resolution atomically revokes the strict run", failures)
 	TestAssertions.equal(int(durable.terminal_resolution.get("stage", -1)), RECOVERY_STAGE_RESOLVED, "terminal resolution atomically writes the resolved receipt", failures)
+	TestAssertions.equal(durable.passive_points_available, 1, "first committed terminal victory grants one available point", failures)
+	TestAssertions.equal(durable.passive_points_lifetime_earned, 1, "first committed terminal victory grants one lifetime point", failures)
+	TestAssertions.equal(durable.discovered_trees, [CityVictoryRewardPolicy.CITY_TREE_ID], "first committed terminal victory reveals City", failures)
+	TestAssertions.equal(durable.tree_allocations.get(CityVictoryRewardPolicy.CITY_TREE_ID, []), [CityVictoryRewardPolicy.CITY_ROOT_ID], "first committed terminal victory seeds the free City root", failures)
 	TestAssertions.equal(int(begun.flow.call(&"state")), STATE_RESOLVED_AWAITING_PROJECTION, "successful resolution awaits recap projection", failures)
 	TestAssertions.truthy(bool(begun.flow.call(&"finalize")), "resolved presentation finalizes", failures)
 	TestAssertions.equal(int(begun.flow.call(&"state")), STATE_FINALIZED, "finalize enters the action-visible state", failures)
@@ -351,6 +362,14 @@ func _test_generic_and_terminal_resolution_boundaries(failures: Array[String]) -
 	var cold_resume: Variant = cold.call(&"resume", recovery.get("record"), durable, begun.root)
 	TestAssertions.truthy(_ok(cold_resume), "a crash immediately after resolve cold-resumes the recap: %s" % _error(cold_resume), failures)
 	TestAssertions.equal(int(cold.call(&"state")), STATE_RESOLVED_AWAITING_PROJECTION, "cold resolved resume never re-enters resolution", failures)
+	var duplicate_bytes := FileAccess.get_file_as_bytes(begun.store.profile_path(PROFILE_ID, begun.root))
+	var duplicate := RunResolutionService.new(ProfileMutationService.new(begun.store)).resolve_terminal_source(
+		PROFILE_ID, begun.flow.call(&"snapshot").resolution_source,
+		begun.flow.get("_request") as RunResolutionRequest, begun.root,
+	)
+	TestAssertions.truthy(duplicate.ok() and duplicate.duplicate, "same terminal transaction replays as a duplicate", failures)
+	TestAssertions.equal(begun.store.load_profile(PROFILE_ID, begun.root).profile.passive_points_available, 1, "same terminal transaction cannot grant a second point", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(begun.store.profile_path(PROFILE_ID, begun.root)), duplicate_bytes, "ordinary terminal duplicate is write-free", failures)
 	var changed_source_document: Dictionary = begun.flow.call(&"snapshot").resolution_source.to_dictionary()
 	(changed_source_document["item_state"]["registry"]["items"] as Array)[0]["item_level"] = 29
 	var changed_source := RunResolutionSource.from_dictionary(changed_source_document)
@@ -362,6 +381,89 @@ func _test_generic_and_terminal_resolution_boundaries(failures: Array[String]) -
 	TestAssertions.truthy(not duplicate_collision.ok(), "same-request terminal duplicate rejects a different typed source", failures)
 	TestAssertions.equal(FileAccess.get_file_as_bytes(begun.store.profile_path(PROFILE_ID, begun.root)), before_duplicate_bytes, "same-request different-source terminal duplicate is write-free", failures)
 	_cleanup_begun(begun)
+
+func _test_victory_reward_outcome_and_existing_city(failures: Array[String]) -> void:
+	var defeated := _begun_flow(0, "defeat_reward", failures, RunTerminalSnapshot.Outcome.DEFEAT)
+	if defeated.is_empty():
+		return
+	TestAssertions.truthy(_ok(defeated.flow.call(&"confirm_extraction", _strings([]), defeated.store.load_profile(PROFILE_ID, defeated.root).profile)), "defeat fixture confirms empty extraction", failures)
+	TestAssertions.truthy(_ok(defeated.flow.call(&"resolve", PROFILE_ID, defeated.root)), "defeat terminal resolution commits", failures)
+	var defeated_profile: ProfileState = defeated.store.load_profile(PROFILE_ID, defeated.root).profile
+	TestAssertions.equal(defeated_profile.passive_points_available, 0, "defeat grants no passive point", failures)
+	TestAssertions.truthy(CityVictoryRewardPolicy.CITY_TREE_ID not in defeated_profile.discovered_trees, "defeat does not reveal City", failures)
+	TestAssertions.truthy(not defeated_profile.tree_allocations.has(CityVictoryRewardPolicy.CITY_TREE_ID), "defeat does not seed City Heart", failures)
+	_cleanup_begun(defeated)
+
+	var existing := _begun_flow(0, "existing_city_victory", failures, RunTerminalSnapshot.Outcome.VICTORY, func(profile: ProfileState) -> void:
+		profile.discovered_trees = [CityVictoryRewardPolicy.CITY_TREE_ID]
+		profile.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID] = [CityVictoryRewardPolicy.CITY_ROOT_ID]
+		profile.passive_points_available = 4
+		profile.passive_points_lifetime_earned = 7
+	)
+	if existing.is_empty():
+		return
+	TestAssertions.truthy(_ok(existing.flow.call(&"confirm_extraction", _strings([]), existing.store.load_profile(PROFILE_ID, existing.root).profile)), "existing-City fixture confirms empty extraction", failures)
+	TestAssertions.truthy(_ok(existing.flow.call(&"resolve", PROFILE_ID, existing.root)), "later unique victory commits", failures)
+	var rewarded: ProfileState = existing.store.load_profile(PROFILE_ID, existing.root).profile
+	TestAssertions.equal(rewarded.passive_points_available, 5, "later unique victory grants one additional available point", failures)
+	TestAssertions.equal(rewarded.passive_points_lifetime_earned, 8, "later unique victory grants one additional lifetime point", failures)
+	TestAssertions.equal(rewarded.tree_allocations[CityVictoryRewardPolicy.CITY_TREE_ID], [CityVictoryRewardPolicy.CITY_ROOT_ID], "later victory does not duplicate City Heart", failures)
+	_cleanup_begun(existing)
+
+func _test_victory_reward_failure_atomicity(failures: Array[String]) -> void:
+	var begun := _begun_flow(0, "victory_reward_failures", failures)
+	if begun.is_empty():
+		return
+	TestAssertions.truthy(_ok(begun.flow.call(&"confirm_extraction", _strings([]), begun.store.load_profile(PROFILE_ID, begun.root).profile)), "reward-failure fixture confirms empty extraction", failures)
+	var source: RunResolutionSource = begun.flow.call(&"snapshot").resolution_source
+	var request := begun.flow.get("_request") as RunResolutionRequest
+	var path: String = begun.store.profile_path(PROFILE_ID, begun.root)
+	var before_bytes := FileAccess.get_file_as_bytes(path)
+	var before_profile: Dictionary = begun.store.load_profile(PROFILE_ID, begun.root).profile.to_dictionary()
+
+	var evaluator_failure := RunResolutionService.new(ProfileMutationService.new(begun.store), func(_candidate: ProfileState, _source: RunResolutionSource, _request: RunResolutionRequest) -> RunResolutionEvaluation:
+		return RunResolutionEvaluation.create(null, 0, 0, 0, "injected evaluator failure", RunResolutionEvaluation.FailureCategory.INTERNAL, "Injected evaluator failure")
+	).resolve_terminal_source(PROFILE_ID, source, request, begun.root)
+	TestAssertions.truthy(not evaluator_failure.ok() and evaluator_failure.error.contains("injected evaluator failure"), "evaluator failure rejects terminal reward", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "evaluator failure leaves exact profile bytes unchanged", failures)
+
+	var marker_failure := RunResolutionService.new(ProfileMutationService.new(begun.store), func(candidate: ProfileState, live_source: RunResolutionSource, live_request: RunResolutionRequest) -> RunResolutionEvaluation:
+		var evaluation := RunResolutionEvaluator.evaluate(candidate, live_source, live_request)
+		candidate.terminal_resolution = {}
+		return evaluation
+	).resolve_terminal_source(PROFILE_ID, source, request, begun.root)
+	TestAssertions.truthy(not marker_failure.ok() and marker_failure.error.contains("terminal"), "post-reward terminal marker failure rejects the transaction", failures)
+	TestAssertions.equal(marker_failure.failure_category, RunResolutionEvaluation.FailureCategory.INTERNAL, "post-reward marker failure retains the internal failure category", failures)
+	TestAssertions.truthy(not marker_failure.player_reason.is_empty(), "post-reward marker failure retains safe player copy", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "post-reward marker failure publishes no extraction City root point or terminal stage", failures)
+
+	var failing_store := ProfileStore.new(AtomicJsonStore.new(func(_temporary: String, _target: String) -> Error: return ERR_CANT_CREATE))
+	var save_failure := RunResolutionService.new(ProfileMutationService.new(failing_store)).resolve_terminal_source(PROFILE_ID, source, request, begun.root)
+	TestAssertions.truthy(not save_failure.ok() and save_failure.error.contains("JSON_STORE_SAVE_ERROR"), "save failure rejects the complete victory transaction", failures)
+	TestAssertions.equal(save_failure.failure_category, RunResolutionEvaluation.FailureCategory.INTERNAL, "post-evaluation save failure retains the internal failure category", failures)
+	TestAssertions.truthy(not save_failure.player_reason.is_empty(), "post-evaluation save failure retains safe player copy", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(path), before_bytes, "save failure preserves exact durable profile bytes", failures)
+	TestAssertions.equal(begun.store.load_profile(PROFILE_ID, begun.root).profile.to_dictionary(), before_profile, "all reward failure paths preserve the complete profile projection", failures)
+	_cleanup_begun(begun)
+
+	var overflow := _begun_flow(0, "victory_reward_overflow", failures, RunTerminalSnapshot.Outcome.VICTORY, func(profile: ProfileState) -> void:
+		profile.passive_points_available = ProfileCodec.JSON_SAFE_INTEGER_MAX
+		profile.passive_points_lifetime_earned = ProfileCodec.JSON_SAFE_INTEGER_MAX
+	)
+	if overflow.is_empty():
+		return
+	TestAssertions.truthy(_ok(overflow.flow.call(&"confirm_extraction", _strings([]), overflow.store.load_profile(PROFILE_ID, overflow.root).profile)), "overflow fixture confirms empty extraction", failures)
+	var overflow_path: String = overflow.store.profile_path(PROFILE_ID, overflow.root)
+	var overflow_bytes := FileAccess.get_file_as_bytes(overflow_path)
+	var overflow_result := RunResolutionService.new(ProfileMutationService.new(overflow.store)).resolve_terminal_source(
+		PROFILE_ID, overflow.flow.call(&"snapshot").resolution_source,
+		overflow.flow.get("_request") as RunResolutionRequest, overflow.root,
+	)
+	TestAssertions.truthy(not overflow_result.ok() and overflow_result.error.contains("passive_points") and overflow_result.error.contains("overflow"), "victory overflow rejects at the reward boundary", failures)
+	TestAssertions.equal(overflow_result.failure_category, RunResolutionEvaluation.FailureCategory.INTERNAL, "victory overflow retains the internal failure category", failures)
+	TestAssertions.truthy(not overflow_result.player_reason.is_empty(), "victory overflow retains safe player copy", failures)
+	TestAssertions.equal(FileAccess.get_file_as_bytes(overflow_path), overflow_bytes, "victory overflow is write-free", failures)
+	_cleanup_begun(overflow)
 
 func _test_terminal_duplicate_revalidates_live_resolved_truth(failures: Array[String]) -> void:
 	var begun := _begun_flow(2, "terminal_duplicate_live_drift", failures)
@@ -618,14 +720,22 @@ func _test_projection_retry_uses_durable_truth_without_resolution_or_mutation(fa
 	TestAssertions.equal(int(resolution.get("terminal_calls")), 0, "post-FINALIZED invalid transitions invoke no resolution", failures)
 	_free_fixture(fixture, root)
 
-func _begun_flow(capacity: int, label: String, failures: Array[String]) -> Dictionary:
+func _begun_flow(
+	capacity: int,
+	label: String,
+	failures: Array[String],
+	outcome: RunTerminalSnapshot.Outcome = RunTerminalSnapshot.Outcome.VICTORY,
+	prepare_profile: Callable = Callable(),
+) -> Dictionary:
 	var fixture := _fixture(capacity)
+	if prepare_profile.is_valid():
+		prepare_profile.call(fixture.profile)
 	var root := _case_root(label)
 	var store := ProfileStore.new()
 	if not store.save_profile(fixture.profile, root).is_empty():
 		failures.append("%s fixture could not save" % label); _free_fixture(fixture, root); return {}
 	var flow: Variant = (load(FLOW_PATH) as Script).new()
-	var result: Variant = flow.call(&"begin", RunTerminalSnapshot.Outcome.VICTORY, 90.0, fixture.context, fixture.profile, root)
+	var result: Variant = flow.call(&"begin", outcome, 90.0, fixture.context, fixture.profile, root)
 	if not _ok(result):
 		failures.append("%s terminal flow could not begin: %s" % [label, _error(result)]); _free_fixture(fixture, root); return {}
 	TestAssertions.equal(int(flow.call(&"state")), STATE_CHOOSING_EXTRACTION, "%s opens extraction only after persistence" % label, failures)
