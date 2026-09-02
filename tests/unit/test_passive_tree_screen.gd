@@ -36,6 +36,7 @@ func run() -> Array[String]:
 		return failures
 	_test_node_control_copy_activation_and_redaction(failures)
 	_test_canvas_copy_draw_zoom_pan_and_navigation(failures)
+	_test_canvas_fit_to_content_contract(failures)
 	_test_screen_invalid_safe_state_and_geometry(failures)
 	_test_screen_obscured_nonleak(failures)
 	_test_visible_detail_disclosures_and_permanent_styling(failures)
@@ -264,6 +265,60 @@ func _test_canvas_copy_draw_zoom_pan_and_navigation(failures: Array[String]) -> 
 	TestAssertions.equal(canvas.call(&"selected_node_id"), &"root", "reverse traversal selects the linked origin", failures)
 	TestAssertions.truthy(not canvas.call(&"select_connected", Vector2.LEFT), "navigation rejects candidates with nonpositive alignment", failures)
 	screen.free()
+
+
+func _test_canvas_fit_to_content_contract(failures: Array[String]) -> void:
+	var canvas := PassiveTreeCanvas.new()
+	canvas.size = Vector2(900, 600)
+	var views: Array[PassiveTreeNodeViewData] = [
+		_view(&"left", Vector2(-400, -200)),
+		_view(&"center", Vector2.ZERO),
+		_view(&"right", Vector2(400, 200)),
+	]
+	canvas.rebuild(views, [])
+	var authored_positions := {
+		&"left": Vector2(-400, -200),
+		&"center": Vector2.ZERO,
+		&"right": Vector2(400, 200),
+	}
+	var has_fit := canvas.has_method(&"fit_to_content")
+	TestAssertions.truthy(has_fit, "canvas exposes the production fit_to_content contract", failures)
+	if has_fit:
+		TestAssertions.truthy(bool(canvas.call(&"fit_to_content", Vector2(24, 24))), "nonempty positive canvas fits authored content", failures)
+		TestAssertions.truthy(is_finite(canvas.zoom_value()) and canvas.zoom_value() >= PassiveTreeCanvas.MIN_ZOOM and canvas.zoom_value() <= PassiveTreeCanvas.MAX_ZOOM, "content fit produces finite clamped zoom", failures)
+		TestAssertions.truthy(is_finite(canvas.pan_value().x) and is_finite(canvas.pan_value().y), "content fit produces finite pan", failures)
+		var canvas_rect := Rect2(Vector2.ZERO, canvas.size)
+		for node_id: StringName in canvas.node_ids():
+			TestAssertions.equal(canvas.node_view(node_id).position, authored_positions[node_id], "%s authored position survives content fit" % node_id, failures)
+			TestAssertions.truthy(canvas_rect.encloses(canvas.node_control(node_id).get_rect()), "%s fitted control remains inside the canvas" % node_id, failures)
+
+		canvas.rebuild([], [])
+		canvas.set_zoom(1.25)
+		canvas.set_pan(Vector2(17, -23))
+		TestAssertions.truthy(not bool(canvas.call(&"fit_to_content")), "empty canvas rejects content fit", failures)
+		TestAssertions.equal(canvas.zoom_value(), 1.25, "empty fit leaves zoom unchanged", failures)
+		TestAssertions.equal(canvas.pan_value(), Vector2(17, -23), "empty fit leaves pan unchanged", failures)
+
+		var zero_canvas := PassiveTreeCanvas.new()
+		zero_canvas.size = Vector2.ZERO
+		zero_canvas.rebuild(views, [])
+		zero_canvas.set_zoom(1.5)
+		zero_canvas.set_pan(Vector2(-9, 11))
+		TestAssertions.truthy(not bool(zero_canvas.call(&"fit_to_content")), "zero-sized canvas rejects content fit", failures)
+		TestAssertions.equal(zero_canvas.zoom_value(), 1.5, "zero-sized fit leaves zoom unchanged", failures)
+		TestAssertions.equal(zero_canvas.pan_value(), Vector2(-9, 11), "zero-sized fit leaves pan unchanged", failures)
+		zero_canvas.free()
+
+		var cramped_canvas := PassiveTreeCanvas.new()
+		cramped_canvas.size = Vector2(100, 100)
+		cramped_canvas.rebuild(views, [])
+		cramped_canvas.set_zoom(1.75)
+		cramped_canvas.set_pan(Vector2(5, 7))
+		TestAssertions.truthy(not bool(cramped_canvas.call(&"fit_to_content", Vector2(24, 24))), "nonpositive available space rejects content fit", failures)
+		TestAssertions.equal(cramped_canvas.zoom_value(), 1.75, "cramped fit leaves zoom unchanged", failures)
+		TestAssertions.equal(cramped_canvas.pan_value(), Vector2(5, 7), "cramped fit leaves pan unchanged", failures)
+		cramped_canvas.free()
+	canvas.free()
 
 
 func _test_screen_invalid_safe_state_and_geometry(failures: Array[String]) -> void:

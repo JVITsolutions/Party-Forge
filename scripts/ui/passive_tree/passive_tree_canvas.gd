@@ -137,6 +137,40 @@ func pan_value() -> Vector2:
 	return _pan
 
 
+func fit_to_content(margin: Vector2 = Vector2(24.0, 24.0)) -> bool:
+	if _views.is_empty() or size.x <= 0.0 or size.y <= 0.0:
+		return false
+	var minimum := Vector2(INF, INF)
+	var maximum := Vector2(-INF, -INF)
+	var maximum_control_size := Vector2.ZERO
+	for node_id: StringName in _views:
+		var view := _views[node_id] as PassiveTreeNodeViewData
+		var control := _controls.get(node_id) as Control
+		if view == null or control == null:
+			return false
+		minimum.x = minf(minimum.x, view.position.x)
+		minimum.y = minf(minimum.y, view.position.y)
+		maximum.x = maxf(maximum.x, view.position.x)
+		maximum.y = maxf(maximum.y, view.position.y)
+		maximum_control_size.x = maxf(maximum_control_size.x, control.size.x)
+		maximum_control_size.y = maxf(maximum_control_size.y, control.size.y)
+	var available := size - maximum_control_size - margin * 2.0
+	if available.x <= 0.0 or available.y <= 0.0:
+		return false
+	var extent := maximum - minimum
+	var horizontal_zoom := available.x / extent.x if extent.x > 0.0 else MAX_ZOOM
+	var vertical_zoom := available.y / extent.y if extent.y > 0.0 else MAX_ZOOM
+	var fitted_zoom := clampf(minf(horizontal_zoom, vertical_zoom), MIN_ZOOM, MAX_ZOOM)
+	var fitted_pan := -((minimum + maximum) * 0.5) * fitted_zoom
+	if not is_finite(fitted_zoom) or not is_finite(fitted_pan.x) or not is_finite(fitted_pan.y):
+		return false
+	_zoom = fitted_zoom
+	_pan = fitted_pan
+	_layout_nodes()
+	queue_redraw()
+	return true
+
+
 func _connected_ids(node_id: StringName) -> Array[StringName]:
 	var ids: Array[StringName] = []
 	for connection: Dictionary in _connections:

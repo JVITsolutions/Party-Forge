@@ -185,22 +185,22 @@ func _test_effect_requirement_and_portal_contract(failures: Array[String]) -> vo
 
 func _test_geometry_invariants_and_boundaries(failures: Array[String]) -> void:
 	_assert_geometry_valid(
-		[_node("a", Vector2.ZERO), _node("b", Vector2(104.0, 0.0))],
+		[_node("a", Vector2.ZERO), _node("b", Vector2(180.0, 0.0))],
 		[],
 		"exact 12-pixel node clearance is valid",
 		failures,
 	)
 	_assert_geometry_invalid(
-		[_node("a", Vector2.ZERO), _node("b", Vector2(103.999, 0.0))],
+		[_node("a", Vector2.ZERO), _node("b", Vector2(179.999, 0.0))],
 		[],
 		"node_clearance",
 		"just-under node clearance rejects",
 		failures,
 	)
 
-	var edge_nodes := [_node("a", Vector2(-200.0, 0.0)), _node("b", Vector2(200.0, 0.0)), _node("c", Vector2(0.0, 25.0))]
+	var edge_nodes := [_node("a", Vector2(-200.0, 0.0)), _node("b", Vector2(200.0, 0.0)), _node("c", Vector2(0.0, 68.0))]
 	_assert_geometry_valid(edge_nodes, [_connection("edge", "a", "b")], "exact 8-pixel protected corridor is valid", failures)
-	edge_nodes[2] = _node("c", Vector2(0.0, 24.999))
+	edge_nodes[2] = _node("c", Vector2(0.0, 67.999))
 	_assert_geometry_invalid(edge_nodes, [_connection("edge", "a", "b")], "edge_node_clearance", "just-under edge clearance rejects", failures)
 
 	var crossing_nodes := [

@@ -1,8 +1,8 @@
 class_name CityTreeGeometryValidator
 extends RefCounted
 
-const NODE_WIDTH := 92.0
-const NODE_HEIGHT := 34.0
+const NODE_WIDTH := 168.0
+const NODE_HEIGHT := 120.0
 const NODE_CLEARANCE := 12.0
 const EDGE_CLEARANCE := 8.0
 const RIGHT_ANGLE_EXCLUSION_DEGREES := 4.0

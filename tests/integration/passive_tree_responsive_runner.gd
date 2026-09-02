@@ -76,12 +76,19 @@ func _run() -> void:
 		_assert_contained(frame.get_global_rect(), points, "Passive Points header", viewport_size)
 		_assert(canvas.size.x >= 560.0 and canvas.size.y >= 420.0, "canvas retains usable minimum geometry at %dx%d" % [viewport_size.x, viewport_size.y])
 		_assert(detail.size.x >= 340.0 and detail.size.y >= 420.0, "detail retains usable minimum geometry at %dx%d" % [viewport_size.x, viewport_size.y])
+		_assert(is_finite(canvas.zoom_value()) and canvas.zoom_value() >= PassiveTreeCanvas.MIN_ZOOM and canvas.zoom_value() <= PassiveTreeCanvas.MAX_ZOOM, "production fit uses finite clamped zoom at %dx%d" % [viewport_size.x, viewport_size.y])
+		_assert(is_finite(canvas.pan_value().x) and is_finite(canvas.pan_value().y), "production fit uses finite pan at %dx%d" % [viewport_size.x, viewport_size.y])
+		for node_id: StringName in canvas.node_ids():
+			var fitted_control := canvas.node_control(node_id)
+			_assert(fitted_control.custom_minimum_size == Vector2(168, 120), "%s retains the approved node footprint at %dx%d" % [node_id, viewport_size.x, viewport_size.y])
+			_assert(_encloses(canvas.get_global_rect(), fitted_control.get_global_rect()), "%s is contained by production fit at %dx%d" % [node_id, viewport_size.x, viewport_size.y])
 
 		canvas.set_zoom(1.0)
 		canvas.set_pan(Vector2.ZERO)
 		_assert(canvas.select_node(&"city-heart"), "root is selectable at %dx%d" % [viewport_size.x, viewport_size.y])
-		for step: int in range(4):
-			_assert(canvas.select_connected(Vector2.UP), "linked navigation step %d reaches the far branch at %dx%d" % [step + 1, viewport_size.x, viewport_size.y])
+		var far_branch_directions: Array[Vector2] = [Vector2.UP, Vector2.UP, Vector2.RIGHT, Vector2.RIGHT]
+		for step: int in range(far_branch_directions.size()):
+			_assert(canvas.select_connected(far_branch_directions[step]), "linked navigation step %d reaches the far branch at %dx%d" % [step + 1, viewport_size.x, viewport_size.y])
 		_assert(canvas.selected_node_id() == &"hero-registry", "linked navigation reaches hero-registry at %dx%d" % [viewport_size.x, viewport_size.y])
 		var far_control := canvas.node_control(&"hero-registry")
 		var far_view := canvas.node_view(&"hero-registry")

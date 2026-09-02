@@ -5,11 +5,12 @@
 
 [node name="PassiveTreeNodeControl" type="Button"]
 process_mode = 3
-custom_minimum_size = Vector2(104, 104)
+custom_minimum_size = Vector2(168, 120)
 focus_mode = 2
 mouse_default_cursor_shape = 2
 text = "???"
-text_overrun_behavior = 3
+text_overrun_behavior = 0
+autowrap_mode = 3
 script = ExtResource("1_node")
 
 [node name="NodeVisual" type="Control" parent="."]

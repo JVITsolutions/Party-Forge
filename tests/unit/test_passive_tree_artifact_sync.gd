@@ -2,8 +2,8 @@ extends RefCounted
 
 const SOURCE := "res://data/passive_trees/city/party-forge-city.pstree"
 const RUNTIME := "res://data/passive_trees/city/party-forge-city.pstree.json"
-const SOURCE_SHA256 := "5358b5f93784b19de63ef26d7565325f80629d809bac33e79a966993f62be176"
-const RUNTIME_SHA256 := "0c592cbfe053d8f2dde805f0677a989814ed41bafb12a0e384ff740e50581543"
+const SOURCE_SHA256 := "d23887b63f94e829de3f39733b19bbc7b13b1d6ef4b8dc4132f39f52188be2e5"
+const RUNTIME_SHA256 := "0eeb487e8f30b9b1ae975b9345ca0504759de4ec417b2bb2e710e7aad85f2425"
 
 func run() -> Array[String]:
 	var failures: Array[String] = []
