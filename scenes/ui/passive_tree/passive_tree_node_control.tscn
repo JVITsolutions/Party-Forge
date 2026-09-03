@@ -21,7 +21,6 @@ theme_override_styles/normal = SubResource("StyleBoxEmpty_label_safe")
 theme_override_styles/hover = SubResource("StyleBoxEmpty_label_safe")
 theme_override_styles/pressed = SubResource("StyleBoxEmpty_label_safe")
 theme_override_styles/hover_pressed = SubResource("StyleBoxEmpty_label_safe")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_label_safe")
 theme_override_styles/disabled = SubResource("StyleBoxEmpty_label_safe")
 script = ExtResource("1_node")
 

@@ -4,7 +4,7 @@
 
 **Goal:** Increase the visible passive-node circles to approximately 116 pixels and constrain every full node name to the circle interior without changing City data, topology, coordinates, or gameplay.
 
-**Architecture:** Keep the existing `168 x 120` button as the interaction and layout footprint. Make `PassiveTreeNodeVisual` the single authority for visible radius, and apply one transparent `StyleBoxEmpty` content inset to every Button interaction state so native word-smart wrapping uses the circle-safe interior. Extend the production visual runner to measure every circular node's word regions against the same radius API.
+**Architecture:** Keep the existing `168 x 120` button as the interaction and layout footprint. Make `PassiveTreeNodeVisual` the single authority for visible radius, and apply one transparent `StyleBoxEmpty` content inset to every content-bearing Button state so native word-smart wrapping uses the circle-safe interior. Preserve Godot's separately drawn inherited focus overlay, and extend the production visual runner to measure every circular node's word regions plus the visible focus-state difference.
 
 **Tech Stack:** Godot 4.7.1 Mono, GDScript, `.tscn` scene resources, Party Forge focused/unit/integration runners, Git worktrees.
 
@@ -14,7 +14,7 @@
 - Use only `F:\Projects(root)\Game dev\godot\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe` for shell verification.
 - Preserve the `168 x 120` interaction rectangle, all 37 LatticeWright coordinates, 37 connections, six portal charters, City Heart diamond, gameplay semantics, font size, complete names, word-smart wrapping, and no-ellipsis behavior.
 - Set the circular radius ratio to exactly `0.48`, yielding `57.6` pixels of radius and `115.2` pixels of diameter at production size.
-- Constrain text with exactly 32-pixel left/right and 24-pixel top/bottom transparent content margins in every Button interaction state.
+- Constrain text with exactly 32-pixel left/right and 24-pixel top/bottom transparent content margins in normal, hover, pressed, hover-pressed, and disabled states; do not override the inherited focus-overlay style.
 - Do not change either format-3/runtime-v3 City artifact or any active art, body-model, HUD, attack-windup, Review Batch 1, Frost, or run-seed path.
 - Preserve authoritative main's exact 68 untracked `.gd.uid` files and all registered worktrees. Never reset, clean, delete, rewrite history, or force-push.
 
@@ -38,7 +38,7 @@ After locating `NodeVisual` in `_test_node_control_readability_contract`, add gu
 TestAssertions.truthy(visual.has_method(&"circle_radius_for_size"), "node visual exposes its production circle-radius contract", failures)
 if visual.has_method(&"circle_radius_for_size"):
 	TestAssertions.near(float(visual.call(&"circle_radius_for_size", Vector2(168.0, 120.0))), 57.6, 0.001, "passive-node circles use the approved 115.2-pixel diameter", failures)
-for style_name: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+for style_name: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"disabled"]:
 	var style := node_control.get_theme_stylebox(style_name)
 	TestAssertions.truthy(style != null, "%s state owns a label-inset style" % style_name, failures)
 	if style != null:
@@ -46,6 +46,7 @@ for style_name: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed"
 		TestAssertions.near(style.get_content_margin(SIDE_RIGHT), 32.0, 0.001, "%s right label inset" % style_name, failures)
 		TestAssertions.near(style.get_content_margin(SIDE_TOP), 24.0, 0.001, "%s top label inset" % style_name, failures)
 		TestAssertions.near(style.get_content_margin(SIDE_BOTTOM), 24.0, 0.001, "%s bottom label inset" % style_name, failures)
+TestAssertions.truthy(not node_control.has_theme_stylebox_override(&"focus"), "passive nodes retain the inherited visible keyboard/controller focus overlay", failures)
 ```
 
 - [ ] **Step 2: Extend the visual runner to check all circular labels**
@@ -147,7 +148,6 @@ theme_override_styles/normal = SubResource("StyleBoxEmpty_label_safe")
 theme_override_styles/hover = SubResource("StyleBoxEmpty_label_safe")
 theme_override_styles/pressed = SubResource("StyleBoxEmpty_label_safe")
 theme_override_styles/hover_pressed = SubResource("StyleBoxEmpty_label_safe")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_label_safe")
 theme_override_styles/disabled = SubResource("StyleBoxEmpty_label_safe")
 ```
 
@@ -155,7 +155,7 @@ theme_override_styles/disabled = SubResource("StyleBoxEmpty_label_safe")
 
 Run the same focused and visual commands from Task 1.
 
-Expected: focused runner exits 0 with exactly one `TEST_SUMMARY: PASS (0 failures)`; visual runner exits 0 with exactly one `CITY_TREE_V3_VISUAL_SUMMARY: PASS`; every circle-label assertion passes; forbidden diagnostic count is zero.
+Expected: focused runner exits 0 with exactly one `TEST_SUMMARY: PASS (0 failures)`; visual runner exits 0 with exactly one `CITY_TREE_V3_VISUAL_SUMMARY: PASS`; every circle-label assertion passes; removing and restoring focus produces a visible pixel difference; forbidden diagnostic count is zero.
 
 - [ ] **Step 4: Inspect the fresh screenshot**
 

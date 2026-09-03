@@ -88,6 +88,20 @@ func _run() -> void:
 	if image != null and not image.is_empty() and connection_image != null and not connection_image.is_empty():
 		_assert(image.get_size() == VIEWPORT_SIZE, "visual capture is exactly 1920x1080")
 		_assert(_image_is_nonblank(image), "visual capture is nonblank")
+		var focus_owner := canvas.node_control(canvas.selected_node_id())
+		_assert(focus_owner != null, "City screen resolves the selected passive node for focus evidence")
+		if focus_owner != null:
+			focus_owner.grab_focus()
+			await _frames(2)
+			image = viewport.get_texture().get_image()
+			var focus_rect := focus_owner.get_global_rect().grow(8.0)
+			focus_owner.release_focus()
+			await _frames(2)
+			var unfocused_image := viewport.get_texture().get_image()
+			_assert(_rect_pixel_difference(image, unfocused_image, focus_rect) >= 24, "focused passive node renders an unmistakable visual focus cue")
+			focus_owner.grab_focus()
+			await _frames(2)
+			image = viewport.get_texture().get_image()
 		var viewport_rect := Rect2(Vector2.ZERO, Vector2(VIEWPORT_SIZE))
 		for connection: Dictionary in canvas.connection_views():
 			var connection_id := StringName(connection.get("id", ""))
@@ -384,6 +398,21 @@ func _image_is_nonblank(image: Image) -> bool:
 			if absf(pixel.r - first.r) + absf(pixel.g - first.g) + absf(pixel.b - first.b) + absf(pixel.a - first.a) > 0.03:
 				return true
 	return false
+
+
+func _rect_pixel_difference(first: Image, second: Image, rect: Rect2) -> int:
+	if first == null or second == null or first.is_empty() or second.is_empty() or first.get_size() != second.get_size():
+		return 0
+	var changed := 0
+	var start_x := maxi(0, floori(rect.position.x))
+	var end_x := mini(first.get_width(), ceili(rect.end.x))
+	var start_y := maxi(0, floori(rect.position.y))
+	var end_y := mini(first.get_height(), ceili(rect.end.y))
+	for y: int in range(start_y, end_y):
+		for x: int in range(start_x, end_x):
+			if _color_distance(first.get_pixel(x, y), second.get_pixel(x, y)) > 0.12:
+				changed += 1
+	return changed
 
 
 func _frames(count: int) -> void:

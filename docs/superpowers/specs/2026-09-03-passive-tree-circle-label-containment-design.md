@@ -13,8 +13,8 @@ The production button owns a `168 x 120` interaction rectangle, but `PassiveTree
 - Preserve the existing `168 x 120` interaction rectangle and all 37 LatticeWright coordinates.
 - Increase the non-keystone circle radius to `48%` of the 120-pixel short dimension, producing a `115.2`-pixel visible diameter (approximately 116 pixels).
 - Constrain native button-label layout to a centered 104-pixel-wide safe interior using transparent style content margins. Preserve word-smart wrapping, centered alignment, current font size, full names, and no ellipsis.
-- Apply the same safe label inset to normal, hover, pressed, hover-pressed, focus, and disabled states so interaction never changes wrapping.
-- Preserve the City Heart diamond, colors, outlines, focus behavior, activation behavior, connections, pan/zoom controls, and detail panel.
+- Apply the same safe label inset to the normal, hover, pressed, hover-pressed, and disabled content states so interaction never changes wrapping. Do not override Godot's separate inherited focus-overlay style.
+- Preserve and pixel-verify the visible keyboard/controller focus indicator together with the City Heart diamond, colors, outlines, activation behavior, connections, pan/zoom controls, and detail panel.
 - Continue using the existing content-fit path. No format-3 source/runtime artifacts or LatticeWright coordinates change.
 
 ## Rejected Alternatives
@@ -25,7 +25,7 @@ The production button owns a `168 x 120` interaction rectangle, but `PassiveTree
 
 ## Verification
 
-Strict TDD will first extend the readability and visual tests so the current 100.8-pixel circle fails. The tests will require the exact approved radius, stable label margins across interaction states, complete unellipsized text, and every rendered node label's measured bounds to remain inside its visible circle or diamond. The focused unit set, City visual runner, passive-tree responsive/input/profile runners, complete test suite, diff check, and a fresh 1920 x 1080 screenshot must pass before integration.
+Strict TDD will first extend the readability and visual tests so the current 100.8-pixel circle fails. The tests will require the exact approved radius, stable label margins across content states, an inherited focus overlay with a visible focused-versus-unfocused pixel difference, complete unellipsized text, and every rendered node label's measured bounds to remain inside its visible circle or diamond. The focused unit set, City visual runner, passive-tree responsive/input/profile runners, complete test suite, diff check, and a fresh 1920 x 1080 screenshot must pass before integration.
 
 ## Containment and Publication
 
