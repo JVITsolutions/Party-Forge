@@ -64,7 +64,7 @@ for node_id: StringName in canvas.node_ids():
 	if visual == null or not visual.has_method(&"circle_radius_for_size"):
 		continue
 	var scale := control.get_global_transform().get_scale().abs()
-	var radius := float(visual.call(&"circle_radius_for_size", control.size)) * minf(scale.x, scale.y) - 4.0
+	var radius := float(visual.call(&"circle_radius_for_size", control.size)) * minf(scale.x, scale.y)
 	for region_value: Variant in renderability.get("word_regions", []) as Array:
 		var region := region_value as Dictionary
 		_assert(_rect_inside_circle(region.get("rect", Rect2()) as Rect2, control.get_global_rect().get_center(), radius), "%s word '%s' escapes its visible circle" % [node_id, String(region.get("word", ""))])

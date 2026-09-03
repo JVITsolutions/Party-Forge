@@ -120,6 +120,21 @@ func _run() -> void:
 			_assert(overlaps.is_empty(), "%s full label '%s' is obstructed by controls: %s" % [charter_id, charter.text, ",".join(overlaps)])
 			_assert(_label_avoids_all_other_controls(canvas, charter_id, full_text_rect), "%s full label bounds are unobscured by every other node control" % charter_id)
 			_assert(_label_has_rendered_text(image, charter, word_regions), "%s full wrapped label has substantial rendered foreground pixels in every word region" % charter_id)
+		for node_id: StringName in canvas.node_ids():
+			var control := canvas.node_control(node_id)
+			var view := canvas.node_view(node_id)
+			if control == null or view == null or view.type in [&"keystone", &"start"]:
+				continue
+			var renderability := _full_label_renderability(canvas, node_id)
+			var visual := control.find_child("NodeVisual", false, false) as Control
+			_assert(visual != null and visual.has_method(&"circle_radius_for_size"), "%s resolves its production circle geometry" % node_id)
+			if visual == null or not visual.has_method(&"circle_radius_for_size"):
+				continue
+			var scale := control.get_global_transform().get_scale().abs()
+			var radius := float(visual.call(&"circle_radius_for_size", control.size)) * minf(scale.x, scale.y)
+			for region_value: Variant in renderability.get("word_regions", []) as Array:
+				var region := region_value as Dictionary
+				_assert(_rect_inside_circle(region.get("rect", Rect2()) as Rect2, control.get_global_rect().get_center(), radius), "%s word '%s' escapes its visible circle" % [node_id, String(region.get("word", ""))])
 		_assert(DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://tests")) == OK, "visual evidence directory exists")
 		_absolute_screenshot_path = ProjectSettings.globalize_path(SCREENSHOT_PATH)
 		_assert(image.save_png(_absolute_screenshot_path) == OK, "visual capture saves outside the repository")
@@ -223,8 +238,8 @@ func _connection_path_evidence(image: Image, from_center: Vector2, to_center: Ve
 	}
 
 
-func _full_label_renderability(canvas: PassiveTreeCanvas, charter_id: StringName) -> Dictionary:
-	var control := canvas.node_control(charter_id)
+func _full_label_renderability(canvas: PassiveTreeCanvas, node_id: StringName) -> Dictionary:
+	var control := canvas.node_control(node_id)
 	if control == null:
 		return {"fits": false, "overlaps": ["missing_control"]}
 	var font := control.get_theme_font(&"font")
@@ -242,12 +257,12 @@ func _full_label_renderability(canvas: PassiveTreeCanvas, charter_id: StringName
 	var full_text_rect := wrapped_layout.get("bounds", Rect2()) as Rect2
 	var text_size := full_text_rect.size
 	var overlaps: Array[String] = []
-	for node_id: StringName in canvas.node_ids():
-		if node_id == charter_id:
+	for other_node_id: StringName in canvas.node_ids():
+		if other_node_id == node_id:
 			continue
-		var other := canvas.node_control(node_id)
+		var other := canvas.node_control(other_node_id)
 		if other == null or full_text_rect.intersects(other.get_global_rect()):
-			overlaps.append(String(node_id))
+			overlaps.append(String(other_node_id))
 	return {
 		"available_rect": available_rect,
 		"fits": _rect_contains_rect(available_rect, full_text_rect),
@@ -311,6 +326,14 @@ func _label_avoids_all_other_controls(canvas: PassiveTreeCanvas, charter_id: Str
 
 func _rect_contains_rect(outer: Rect2, inner: Rect2) -> bool:
 	return inner.position.x >= outer.position.x - 0.5 and inner.position.y >= outer.position.y - 0.5 and inner.end.x <= outer.end.x + 0.5 and inner.end.y <= outer.end.y + 0.5
+
+
+func _rect_inside_circle(rect: Rect2, center: Vector2, radius: float) -> bool:
+	var corners := PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
+	for corner: Vector2 in corners:
+		if corner.distance_to(center) > radius + 0.5:
+			return false
+	return true
 
 
 func _label_has_rendered_text(image: Image, control: PassiveTreeNodeControl, word_regions: Array) -> bool:

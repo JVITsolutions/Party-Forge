@@ -22,6 +22,17 @@ func _test_node_control_readability_contract(failures: Array[String]) -> void:
 	if visual != null:
 		TestAssertions.truthy(visual.show_behind_parent, "node shape renders behind the native button label", failures)
 		TestAssertions.equal(visual.mouse_filter, Control.MOUSE_FILTER_IGNORE, "node shape cannot intercept activation", failures)
+		TestAssertions.truthy(visual.has_method(&"circle_radius_for_size"), "node visual exposes its production circle-radius contract", failures)
+		if visual.has_method(&"circle_radius_for_size"):
+			TestAssertions.near(float(visual.call(&"circle_radius_for_size", Vector2(168.0, 120.0))), 57.6, 0.001, "passive-node circles use the approved 115.2-pixel diameter", failures)
+	for style_name: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+		var style := node_control.get_theme_stylebox(style_name)
+		TestAssertions.truthy(style != null, "%s state owns a label-inset style" % style_name, failures)
+		if style != null:
+			TestAssertions.near(style.get_content_margin(SIDE_LEFT), 32.0, 0.001, "%s left label inset" % style_name, failures)
+			TestAssertions.near(style.get_content_margin(SIDE_RIGHT), 32.0, 0.001, "%s right label inset" % style_name, failures)
+			TestAssertions.near(style.get_content_margin(SIDE_TOP), 24.0, 0.001, "%s top label inset" % style_name, failures)
+			TestAssertions.near(style.get_content_margin(SIDE_BOTTOM), 24.0, 0.001, "%s bottom label inset" % style_name, failures)
 	for state: StringName in [&"allocated", &"allocatable", &"available", &"obscured"]:
 		var view := PassiveTreeNodeViewData.new(&"readability", Vector2.ZERO, &"small", state, "Readable", "Readable", 1, "1")
 		node_control.call(&"bind_view", view)
