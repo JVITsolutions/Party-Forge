@@ -88,6 +88,20 @@ func _run() -> void:
 	if image != null and not image.is_empty() and connection_image != null and not connection_image.is_empty():
 		_assert(image.get_size() == VIEWPORT_SIZE, "visual capture is exactly 1920x1080")
 		_assert(_image_is_nonblank(image), "visual capture is nonblank")
+		var focus_owner := canvas.node_control(canvas.selected_node_id())
+		_assert(focus_owner != null, "City screen resolves the selected passive node for focus evidence")
+		if focus_owner != null:
+			focus_owner.grab_focus()
+			await _frames(2)
+			image = viewport.get_texture().get_image()
+			var focus_rect := focus_owner.get_global_rect().grow(8.0)
+			focus_owner.release_focus()
+			await _frames(2)
+			var unfocused_image := viewport.get_texture().get_image()
+			_assert(_rect_pixel_difference(image, unfocused_image, focus_rect) >= 24, "focused passive node renders an unmistakable visual focus cue")
+			focus_owner.grab_focus()
+			await _frames(2)
+			image = viewport.get_texture().get_image()
 		var viewport_rect := Rect2(Vector2.ZERO, Vector2(VIEWPORT_SIZE))
 		for connection: Dictionary in canvas.connection_views():
 			var connection_id := StringName(connection.get("id", ""))
@@ -120,6 +134,21 @@ func _run() -> void:
 			_assert(overlaps.is_empty(), "%s full label '%s' is obstructed by controls: %s" % [charter_id, charter.text, ",".join(overlaps)])
 			_assert(_label_avoids_all_other_controls(canvas, charter_id, full_text_rect), "%s full label bounds are unobscured by every other node control" % charter_id)
 			_assert(_label_has_rendered_text(image, charter, word_regions), "%s full wrapped label has substantial rendered foreground pixels in every word region" % charter_id)
+		for node_id: StringName in canvas.node_ids():
+			var control := canvas.node_control(node_id)
+			var view := canvas.node_view(node_id)
+			if control == null or view == null or view.type in [&"keystone", &"start"]:
+				continue
+			var renderability := _full_label_renderability(canvas, node_id)
+			var visual := control.find_child("NodeVisual", false, false) as Control
+			_assert(visual != null and visual.has_method(&"circle_radius_for_size"), "%s resolves its production circle geometry" % node_id)
+			if visual == null or not visual.has_method(&"circle_radius_for_size"):
+				continue
+			var scale := control.get_global_transform().get_scale().abs()
+			var radius := float(visual.call(&"circle_radius_for_size", control.size)) * minf(scale.x, scale.y)
+			for region_value: Variant in renderability.get("word_regions", []) as Array:
+				var region := region_value as Dictionary
+				_assert(_rect_inside_circle(region.get("rect", Rect2()) as Rect2, control.get_global_rect().get_center(), radius), "%s word '%s' escapes its visible circle" % [node_id, String(region.get("word", ""))])
 		_assert(DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://tests")) == OK, "visual evidence directory exists")
 		_absolute_screenshot_path = ProjectSettings.globalize_path(SCREENSHOT_PATH)
 		_assert(image.save_png(_absolute_screenshot_path) == OK, "visual capture saves outside the repository")
@@ -223,8 +252,8 @@ func _connection_path_evidence(image: Image, from_center: Vector2, to_center: Ve
 	}
 
 
-func _full_label_renderability(canvas: PassiveTreeCanvas, charter_id: StringName) -> Dictionary:
-	var control := canvas.node_control(charter_id)
+func _full_label_renderability(canvas: PassiveTreeCanvas, node_id: StringName) -> Dictionary:
+	var control := canvas.node_control(node_id)
 	if control == null:
 		return {"fits": false, "overlaps": ["missing_control"]}
 	var font := control.get_theme_font(&"font")
@@ -242,12 +271,12 @@ func _full_label_renderability(canvas: PassiveTreeCanvas, charter_id: StringName
 	var full_text_rect := wrapped_layout.get("bounds", Rect2()) as Rect2
 	var text_size := full_text_rect.size
 	var overlaps: Array[String] = []
-	for node_id: StringName in canvas.node_ids():
-		if node_id == charter_id:
+	for other_node_id: StringName in canvas.node_ids():
+		if other_node_id == node_id:
 			continue
-		var other := canvas.node_control(node_id)
+		var other := canvas.node_control(other_node_id)
 		if other == null or full_text_rect.intersects(other.get_global_rect()):
-			overlaps.append(String(node_id))
+			overlaps.append(String(other_node_id))
 	return {
 		"available_rect": available_rect,
 		"fits": _rect_contains_rect(available_rect, full_text_rect),
@@ -313,6 +342,14 @@ func _rect_contains_rect(outer: Rect2, inner: Rect2) -> bool:
 	return inner.position.x >= outer.position.x - 0.5 and inner.position.y >= outer.position.y - 0.5 and inner.end.x <= outer.end.x + 0.5 and inner.end.y <= outer.end.y + 0.5
 
 
+func _rect_inside_circle(rect: Rect2, center: Vector2, radius: float) -> bool:
+	var corners := PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
+	for corner: Vector2 in corners:
+		if corner.distance_to(center) > radius + 0.5:
+			return false
+	return true
+
+
 func _label_has_rendered_text(image: Image, control: PassiveTreeNodeControl, word_regions: Array) -> bool:
 	var font_color := control.get_theme_color(&"font_color")
 	var outline_color := control.get_theme_color(&"font_outline_color")
@@ -361,6 +398,21 @@ func _image_is_nonblank(image: Image) -> bool:
 			if absf(pixel.r - first.r) + absf(pixel.g - first.g) + absf(pixel.b - first.b) + absf(pixel.a - first.a) > 0.03:
 				return true
 	return false
+
+
+func _rect_pixel_difference(first: Image, second: Image, rect: Rect2) -> int:
+	if first == null or second == null or first.is_empty() or second.is_empty() or first.get_size() != second.get_size():
+		return 0
+	var changed := 0
+	var start_x := maxi(0, floori(rect.position.x))
+	var end_x := mini(first.get_width(), ceili(rect.end.x))
+	var start_y := maxi(0, floori(rect.position.y))
+	var end_y := mini(first.get_height(), ceili(rect.end.y))
+	for y: int in range(start_y, end_y):
+		for x: int in range(start_x, end_x):
+			if _color_distance(first.get_pixel(x, y), second.get_pixel(x, y)) > 0.12:
+				changed += 1
+	return changed
 
 
 func _frames(count: int) -> void:
